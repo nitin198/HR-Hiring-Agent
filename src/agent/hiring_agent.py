@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select, func
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -139,7 +140,17 @@ class HiringAgent:
                 )
                 session.add(analysis)
 
-            await session.commit()
+            for attempt in range(1, 4):
+                try:
+                    await session.commit()
+                    break
+                except OperationalError as exc:
+                    if "database is locked" not in str(exc).lower():
+                        raise
+                    if attempt == 3:
+                        raise
+                    await session.rollback()
+                    await asyncio.sleep(0.5 * attempt)
             await session.refresh(analysis)
 
             # Log action
