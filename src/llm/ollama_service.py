@@ -3,8 +3,6 @@
 import json
 from typing import Any
 
-import httpx
-
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.config.settings import get_settings
@@ -28,16 +26,18 @@ class OllamaService:
         self.base_url = base_url or settings.ollama_base_url
         self.timeout = settings.ollama_timeout
 
-        self.temperature = 0.3
+        try:
+            from langchain_ollama import ChatOllama
+        except Exception as exc:
+            raise RuntimeError("langchain-ollama is required to use OllamaService") from exc
 
-    def _format_messages(self, messages: list[dict[str, str]]) -> list[dict[str, str]]:
-        """Normalize messages for Ollama API."""
-        formatted = []
-        for msg in messages:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            formatted.append({"role": role, "content": content})
-        return formatted
+        self._llm = ChatOllama(
+            model="kimi-k2.5:cloud",
+            base_url=self.base_url,
+            streaming=False,
+            temperature=0.3,  # Lower temperature for more consistent analysis
+            timeout=self.timeout,
+        )
 
 
     async def invoke(self, messages: list[dict[str, str]]) -> str:
@@ -54,29 +54,24 @@ class OllamaService:
             ConnectionError: If Ollama is not reachable
             TimeoutError: If request times out
         """
-        payload = {
-            "model": self.model,
-            "messages": self._format_messages(messages),
-            "stream": False,
-            "options": {"temperature": self.temperature},
-        }
+        langchain_messages = []
+
+        for msg in messages:
+            if msg["role"] == "system":
+                langchain_messages.append(SystemMessage(content=msg["content"]))
+            elif msg["role"] == "user":
+                langchain_messages.append(HumanMessage(content=msg["content"]))
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(f"{self.base_url}/api/chat", json=payload)
-                response.raise_for_status()
-                data = response.json()
+            response = await self._llm.ainvoke(langchain_messages)
+            return response.content
         except Exception as e:
             if "timeout" in str(e).lower() or "timed out" in str(e).lower():
                 raise TimeoutError(f"Ollama request timed out after {self.timeout} seconds") from e
-            if "connection" in str(e).lower() or "refused" in str(e).lower():
+            elif "connection" in str(e).lower() or "refused" in str(e).lower():
                 raise ConnectionError(f"Cannot connect to Ollama at {self.base_url}") from e
-            raise
-
-        message = (data.get("message") or {}).get("content")
-        if not message:
-            raise ValueError(f"Ollama response missing message content: {data}")
-        return message
+            else:
+                raise
 
     async def invoke_with_json(self, messages: list[dict[str, str]]) -> dict[str, Any]:
         """
@@ -178,14 +173,39 @@ Provide your analysis in the following JSON format:
     "recommendation": "<detailed recommendation text>"
 }}
 
-Ensure all scores are between 0 and 100. Provide at least 5 questions per question category. Be specific and evidence-based in your analysis."""
+Ensure all scores are between 0 and 100. Be specific and evidence-based in your analysis."""
 
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
 
-        return await self.invoke_with_json(messages)
+        try:
+            return await self.invoke_with_json(messages)
+        except Exception as exc:
+            # Graceful fallback so analysis flow doesn't crash if LLM fails
+            return {
+                "skills": [],
+                "experience_years": 0,
+                "tech_stack": [],
+                "domain_knowledge": [],
+                "seniority": None,
+                "strengths": [],
+                "weaknesses": [],
+                "skill_match_score": 0,
+                "experience_score": 0,
+                "domain_score": 0,
+                "project_complexity_score": 0,
+                "soft_skills_score": 0,
+                "risks": [],
+                "risk_level": "low",
+                "technical_questions": [],
+                "system_design_questions": [],
+                "behavioral_questions": [],
+                "custom_questions": [],
+                "interview_focus_areas": [],
+                "recommendation": f"LLM analysis failed: {exc}",
+            }
 
     async def extract_jd_info(self, jd_text: str) -> dict[str, Any]:
         """
@@ -213,47 +233,6 @@ Provide your analysis in the following JSON format:
     "preferred_skills": ["skill1", "skill2", ...],
     "responsibilities": ["responsibility1", "responsibility2", ...],
     "qualifications": ["qualification1", "qualification2", ...]
-}}
-
-If any field is not clearly specified, use null or an empty list."""
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-
-        return await self.invoke_with_json(messages)
-
-    async def extract_candidate_profile(self, resume_text: str) -> dict[str, Any]:
-        """
-        Extract structured candidate profile information from resume text.
-
-        Args:
-            resume_text: Resume text content
-
-        Returns:
-            Extracted profile information
-        """
-        system_prompt = """You are an AI assistant that extracts structured information from resumes."""
-
-        user_prompt = f"""Extract the following information from this resume:
-
-RESUME:
-{resume_text}
-
-Provide your response in the following JSON format:
-{{
-    "current_role": "<current job title>",
-    "headline": "<one-line role summary>",
-    "total_experience_years": <number>,
-    "primary_skills": ["skill1", "skill2", ...],
-    "secondary_skills": ["skill1", "skill2", ...],
-    "education": "<highest education and institution>",
-    "certifications": ["cert1", "cert2", ...],
-    "summary": "<short professional summary>",
-    "location": "<current location if available>",
-    "linkedin_url": "<url or null>",
-    "portfolio_url": "<url or null>"
 }}
 
 If any field is not clearly specified, use null or an empty list."""
@@ -305,7 +284,7 @@ Provide your response in the following JSON format:
     "custom_questions": ["question1", "question2", ...]
 }}
 
-Generate at least 5 questions per category. Make questions specific to the candidate's background and the role requirements."""
+Generate 3-5 questions per category. Make questions specific to the candidate's background and the role requirements."""
 
         messages = [
             {"role": "system", "content": system_prompt},
