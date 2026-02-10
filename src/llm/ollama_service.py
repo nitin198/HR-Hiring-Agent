@@ -1,6 +1,7 @@
 """Ollama LLM service for AI-powered analysis."""
 
 import ast
+import asyncio
 import json
 import logging
 import re
@@ -29,18 +30,26 @@ class OllamaService:
         self.base_url = base_url or settings.ollama_base_url
         self.timeout = settings.ollama_timeout
         self.temperature = 0.3
+        self.use_chat = settings.ollama_use_chat
 
-        try:
-            from langchain_ollama import ChatOllama
-        except Exception as exc:
-            raise RuntimeError("langchain-ollama is required to use OllamaService") from exc
+        self._llm = None
+        if self.use_chat:
+            try:
+                from langchain_ollama import ChatOllama
+            except Exception as exc:
+                raise RuntimeError("langchain-ollama is required to use OllamaService") from exc
 
-        self._llm = ChatOllama(
-            model=self.model,
-            base_url=self.base_url,
-            streaming=False,
-            temperature=self.temperature,  # Lower temperature for more consistent analysis
-            timeout=self.timeout,
+            self._llm = ChatOllama(
+                model=self.model,
+                base_url=self.base_url,
+                streaming=False,
+                temperature=self.temperature,  # Lower temperature for more consistent analysis
+                timeout=self.timeout,
+            )
+        logging.getLogger(__name__).info(
+            "OllamaService initialized (model=%s, base_url=%s)",
+            self.model,
+            self.base_url,
         )
 
     async def _http_invoke(self, messages: list[dict[str, str]]) -> str:
@@ -89,22 +98,50 @@ class OllamaService:
             elif msg["role"] == "user":
                 langchain_messages.append(HumanMessage(content=msg["content"]))
 
-        try:
-            response = await self._llm.ainvoke(langchain_messages)
-            return response.content
-        except Exception as e:
-            logger = logging.getLogger(__name__)
-            logger.warning("ChatOllama failed, falling back to HTTP API: %s", e)
+        logger = logging.getLogger(__name__)
+        last_error: Exception | None = None
+        if self._llm is not None:
+            for attempt in range(1, 4):
+                try:
+                    response = await self._llm.ainvoke(langchain_messages)
+                    return response.content
+                except Exception as e:
+                    last_error = e
+                    logger.warning(
+                        "ChatOllama failed (attempt %s/3) (model=%s, base_url=%s): %s",
+                        attempt,
+                        self.model,
+                        self.base_url,
+                        e,
+                    )
+                    await asyncio.sleep(0.5 * attempt)
+
+        if last_error is not None:
+            logger.warning(
+                "ChatOllama failed, falling back to HTTP API (model=%s, base_url=%s): %s",
+                self.model,
+                self.base_url,
+                last_error,
+            )
+        for attempt in range(1, 4):
             try:
                 return await self._http_invoke(messages)
-            except Exception:
-                pass
-            if "timeout" in str(e).lower() or "timed out" in str(e).lower():
-                raise TimeoutError(f"Ollama request timed out after {self.timeout} seconds") from e
-            elif "connection" in str(e).lower() or "refused" in str(e).lower():
-                raise ConnectionError(f"Cannot connect to Ollama at {self.base_url}") from e
-            else:
-                raise
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    "HTTP Ollama API failed (attempt %s/3) (model=%s, base_url=%s): %s",
+                    attempt,
+                    self.model,
+                    self.base_url,
+                    e,
+                )
+                await asyncio.sleep(0.5 * attempt)
+
+        if last_error and ("timeout" in str(last_error).lower() or "timed out" in str(last_error).lower()):
+            raise TimeoutError(f"Ollama request timed out after {self.timeout} seconds") from last_error
+        if last_error and ("connection" in str(last_error).lower() or "refused" in str(last_error).lower()):
+            raise ConnectionError(f"Cannot connect to Ollama at {self.base_url}") from last_error
+        raise last_error if last_error else RuntimeError("Ollama request failed")
 
     async def invoke_with_json(self, messages: list[dict[str, str]]) -> dict[str, Any]:
         """
@@ -262,6 +299,61 @@ Ensure all scores are between 0 and 100. Be specific and evidence-based in your 
                 "interview_focus_areas": [],
                 "recommendation": f"LLM analysis failed: {exc}",
             }
+
+    async def extract_candidate_profile(self, resume_text: str) -> dict[str, Any]:
+        """Extract a concise candidate profile from resume text."""
+        system_prompt = """You are an AI assistant that extracts structured candidate profile information from resumes."""
+
+        user_prompt = f"""Extract a concise candidate profile from the resume below.
+
+RESUME:
+{resume_text}
+
+Provide your response in the following JSON format:
+{{
+  "current_role": "<current or most recent role title>",
+  "headline": "<short professional headline>",
+  "total_experience_years": <number>,
+  "primary_skills": ["skill1", "skill2", ...],
+  "secondary_skills": ["skill1", "skill2", ...],
+  "education": "<highest degree or key education summary>",
+  "certifications": ["cert1", "cert2", ...],
+  "summary": "<2-3 sentence summary>",
+  "location": "<city, country if present>",
+  "linkedin_url": "<url if present>",
+  "portfolio_url": "<url if present>"
+}}
+
+If a field is not present, use null or an empty list as appropriate."""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        return await self.invoke_with_json(messages)
+
+    async def extract_candidate_name(self, resume_text: str) -> dict[str, Any]:
+        """Extract candidate name from resume text."""
+        system_prompt = "You extract a candidate's full name from resume text."
+        user_prompt = f"""Extract the candidate's full name from the resume below.
+
+RESUME:
+{resume_text}
+
+Provide your response in the following JSON format:
+{{
+  "name": "<candidate full name>"
+}}
+
+If the name is not present, return null."""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        return await self.invoke_with_json(messages)
 
     async def extract_jd_info(self, jd_text: str) -> dict[str, Any]:
         """

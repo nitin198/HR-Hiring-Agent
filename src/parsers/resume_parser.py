@@ -1,6 +1,10 @@
 """Resume parser for extracting text from various file formats."""
 
 import io
+import zipfile
+from typing import Iterable
+from io import BytesIO
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
 
@@ -99,9 +103,77 @@ class ResumeParser:
                         if cell.text.strip():
                             text_parts.append(cell.text)
 
+            # Fallback: extract all text nodes directly from the DOCX XML,
+            # which can include headers, footers, and text boxes.
+            try:
+                xml_text = cls._extract_docx_xml_text(content_bytes)
+                if xml_text:
+                    text_parts.append(xml_text)
+            except Exception:
+                pass
+
+            # OCR images embedded in DOCX (e.g., scanned resumes or name in header image)
+            try:
+                image_text = cls._ocr_docx_images(content_bytes)
+                if image_text:
+                    text_parts.append(image_text)
+            except Exception:
+                pass
+
             return "\n".join(text_parts)
         except Exception as e:
             raise ValueError(f"Failed to parse DOCX: {e}")
+
+    @staticmethod
+    def _extract_docx_xml_text(content_bytes: bytes) -> str:
+        """Extract all text nodes from DOCX XML files."""
+        text_parts = []
+        with zipfile.ZipFile(io.BytesIO(content_bytes)) as docx_zip:
+            xml_files = [
+                name
+                for name in docx_zip.namelist()
+                if name.startswith("word/") and name.endswith(".xml")
+            ]
+            for name in xml_files:
+                try:
+                    xml_data = docx_zip.read(name)
+                    root = ET.fromstring(xml_data)
+                except Exception:
+                    continue
+                for elem in root.iter():
+                    if elem.tag.endswith("}t") and elem.text:
+                        text_parts.append(elem.text)
+        return "\n".join(text_parts)
+
+    @staticmethod
+    def _ocr_docx_images(content_bytes: bytes) -> str:
+        """Run OCR on images embedded in a DOCX file."""
+        image_bytes_list = []
+        with zipfile.ZipFile(io.BytesIO(content_bytes)) as docx_zip:
+            for name in docx_zip.namelist():
+                if name.startswith("word/media/"):
+                    image_bytes_list.append(docx_zip.read(name))
+        return ResumeParser._ocr_images(image_bytes_list)
+
+    @staticmethod
+    def _ocr_images(images: Iterable[bytes]) -> str:
+        """Extract text from a list of image byte payloads using OCR."""
+        try:
+            from PIL import Image
+            import pytesseract
+        except Exception:
+            return ""
+
+        text_parts = []
+        for img_bytes in images:
+            try:
+                img = Image.open(BytesIO(img_bytes))
+                text = pytesseract.image_to_string(img)
+                if text and text.strip():
+                    text_parts.append(text.strip())
+            except Exception:
+                continue
+        return "\n".join(text_parts)
 
     @staticmethod
     def _parse_doc(content_bytes: bytes) -> str:

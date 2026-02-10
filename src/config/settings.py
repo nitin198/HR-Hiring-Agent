@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(default="http://localhost:11434", description="Ollama API base URL")
     ollama_model: str = Field(default="kimi-k2.5:cloud", description="Ollama model to use")
     ollama_timeout: int = Field(default=300, description="Ollama request timeout in seconds")
+    ollama_use_chat: bool = Field(default=False, description="Use ChatOllama client when available")
 
     # API Configuration
     api_host: str = Field(default="0.0.0.0", description="API host")

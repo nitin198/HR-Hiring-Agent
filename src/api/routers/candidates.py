@@ -55,6 +55,64 @@ def _extract_phone(text: str) -> str | None:
     return match.group(0) if match else None
 
 
+def _normalize_name(value: str) -> str:
+    cleaned = re.sub(r"[\|/\\\\]+", " ", value or "")
+    cleaned = re.sub(r"[^A-Za-z\s\.\-']", " ", cleaned).strip()
+    return re.sub(r"\s{2,}", " ", cleaned).strip()
+
+
+def _is_valid_name(value: str) -> bool:
+    if not value:
+        return False
+    lowered = value.lower()
+    if lowered in {"cv", "resume", "curriculum vitae"}:
+        return False
+    if any(keyword in lowered for keyword in ("profile", "summary", "experience", "education", "skills")):
+        return False
+    parts = value.split()
+    if len(parts) < 2 or len(parts) > 5:
+        return False
+    if len(value) > 80:
+        return False
+    return True
+
+
+def _extract_name(text: str) -> str | None:
+    if not text:
+        return None
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return None
+
+    # Prefer explicit name labels.
+    for line in lines[:30]:
+        if re.match(r"^name\s*[:\-]", line, flags=re.IGNORECASE):
+            candidate = _normalize_name(re.sub(r"^name\s*[:\-]\s*", "", line, flags=re.IGNORECASE))
+            candidate = candidate.split(" - ")[0].split(" – ")[0].split("|")[0].strip()
+            if _is_valid_name(candidate):
+                return candidate
+
+    # Heuristic: first clean line without emails/urls/section headers.
+    for line in lines[:30]:
+        lowered = line.lower()
+        if "@" in line or "http" in lowered:
+            continue
+        if any(keyword in lowered for keyword in ("resume", "curriculum", "cv")):
+            continue
+        candidate = line
+        if "|" in candidate or " - " in candidate or " – " in candidate:
+            candidate = candidate.split(" - ")[0].split(" – ")[0].split("|")[0].strip()
+        for marker in ("personal profile", "profile", "summary"):
+            idx = candidate.lower().find(marker)
+            if idx > 0:
+                candidate = candidate[:idx].strip()
+                break
+        candidate = _normalize_name(candidate)
+        if _is_valid_name(candidate):
+            return candidate
+    return None
+
+
 def _is_likely_resume(text: str) -> bool:
     if not text or len(text) < 200:
         return False
@@ -84,7 +142,7 @@ async def _build_profile(
         "portfolio_url": None,
         "invalid_resume": invalid_resume,
     }
-    if not invalid_resume:
+    if resume_text:
         try:
             llm_profile = await ollama.extract_candidate_profile(resume_text)
             profile_data.update(
@@ -245,8 +303,8 @@ async def create_candidate(
 
 @router.post("/upload", response_model=CandidateResponse, status_code=201)
 async def upload_candidate_resume(
-    name: Annotated[str, Form()],
     db: Annotated[AsyncSession, Depends(get_db)],
+    name: Annotated[str | None, Form()] = None,
     job_description_id: Annotated[int | None, Form()] = None,
     email: Annotated[str | None, Form()] = None,
     phone: Annotated[str | None, Form()] = None,
@@ -287,19 +345,39 @@ async def upload_candidate_resume(
         raise HTTPException(status_code=400, detail=str(e))
 
     invalid_resume = not _is_likely_resume(resume_text)
-    stored_path = _save_resume_file(file.filename, content, name)
+    extracted_name = _extract_name(resume_text)
+    resolved_name = (name or "").strip() or extracted_name
+
+    ollama = OllamaService()
+    if resume_text and (not resolved_name or not _is_valid_name(resolved_name)):
+        try:
+            first_lines = "\n".join(
+                [line for line in (resume_text or "").splitlines() if line.strip()][:20]
+            )
+            llm_name = await ollama.extract_candidate_name(first_lines or resume_text)
+            resolved_name = _normalize_name((llm_name or {}).get("name"))
+            if not _is_valid_name(resolved_name):
+                resolved_name = None
+        except Exception:
+            resolved_name = None
+
+    if not resolved_name or not _is_valid_name(resolved_name):
+        resolved_name = _normalize_name(os.path.splitext(file.filename or "")[0])
+    if not resolved_name or not _is_valid_name(resolved_name):
+        resolved_name = "Candidate"
+    stored_path = _save_resume_file(file.filename, content, resolved_name)
 
     if not email:
         email = _extract_email(resume_text)
     if not phone:
         phone = _extract_phone(resume_text)
 
-    duplicate = await _find_duplicate_candidate(db, name, email)
+    duplicate = await _find_duplicate_candidate(db, resolved_name, email)
     if duplicate:
         raise HTTPException(status_code=409, detail="Candidate already exists with same name and email")
 
     candidate = Candidate(
-        name=name,
+        name=resolved_name,
         email=email,
         phone=phone,
         resume_text=resume_text,
@@ -309,7 +387,6 @@ async def upload_candidate_resume(
     db.add(candidate)
     await db.flush()
 
-    ollama = OllamaService()
     await _build_profile(candidate.id, resume_text, ollama, invalid_resume, db)
     if job_description_id is not None:
         db.add(
