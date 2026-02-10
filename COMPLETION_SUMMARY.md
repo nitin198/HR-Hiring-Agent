@@ -221,7 +221,7 @@ Created and executed `test_e2e_workflow.py` with:
 
 1. Ensure Ollama is running with the required model:
    ```bash
-   ollama pull glm-4.7:cloud
+   ollama pull kimi-k2.5:cloud
    ollama serve
    ```
 

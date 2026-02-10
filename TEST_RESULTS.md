@@ -138,7 +138,7 @@ All candidates analyzed successfully with detailed scoring:
 ### Step 9: System Health Check ✅
 - **Status**: Healthy
 - **Ollama Connected**: True
-- **Ollama Model**: glm-4.7:cloud
+- **Ollama Model**: kimi-k2.5:cloud
 - **Timestamp**: 2026-01-30T17:21:25.104485
 
 ## Issues Found and Fixed During Testing
@@ -188,7 +188,7 @@ All candidates analyzed successfully with detailed scoring:
 ## Key Findings
 
 ### AI Analysis Quality
-The LLM (glm-4.7:cloud) provided high-quality analysis with:
+The LLM (kimi-k2.5:cloud) provided high-quality analysis with:
 - Accurate skill matching
 - Reasonable experience assessment
 - Appropriate risk identification

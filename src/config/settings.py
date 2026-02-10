@@ -19,13 +19,14 @@ class Settings(BaseSettings):
 
     # Ollama Configuration
     ollama_base_url: str = Field(default="http://localhost:11434", description="Ollama API base URL")
-    ollama_model: str = Field(default="glm-4.7:cloud", description="Ollama model to use")
+    ollama_model: str = Field(default="kimi-k2.5:cloud", description="Ollama model to use")
     ollama_timeout: int = Field(default=300, description="Ollama request timeout in seconds")
 
     # API Configuration
     api_host: str = Field(default="0.0.0.0", description="API host")
     api_port: int = Field(default=8000, description="API port")
     api_reload: bool = Field(default=True, description="Enable API auto-reload")
+    api_base_url: str = Field(default="", description="Base URL for UI API calls")
 
     # Database
     database_url: str = Field(default="sqlite+aiosqlite:///./hiring_agent.db", description="Database connection URL")

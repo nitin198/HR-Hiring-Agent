@@ -46,9 +46,9 @@ The AI Smart Hiring Agent now includes a modern, interactive web UI that allows 
 
 ### Prerequisites
 
-1. Ensure Ollama is running with the `glm-4.7:cloud` model:
+1. Ensure Ollama is running with the `kimi-k2.5:cloud` model:
    ```bash
-   ollama pull glm-4.7:cloud
+   ollama pull kimi-k2.5:cloud
    ollama serve
    ```
 
@@ -218,9 +218,9 @@ The UI is built with Bootstrap 5 and supports all modern browsers:
    ollama serve
    ```
 
-2. Verify the `glm-4.7:cloud` model is available:
+2. Verify the `kimi-k2.5:cloud` model is available:
    ```bash
-   ollama pull glm-4.7:cloud
+   ollama pull gkimi-k2.5:cloud
    ```
 
 3. Check the health endpoint:

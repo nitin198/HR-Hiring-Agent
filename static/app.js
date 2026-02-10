@@ -1,5 +1,5 @@
 // API Base URL
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = ((window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || window.location.origin).replace(/\/$/, "");
 
 // State Management
 let currentStep = 1;
@@ -1042,7 +1042,11 @@ function startNewAnalysis() {
     document.getElementById('btn-step-1').disabled = true;
     document.getElementById('btn-step-2').disabled = true;
     document.getElementById('btn-analyze').disabled = true;
-    document.getElementById('candidates-list').innerHTML = '<p class="text-muted">No candidates added yet</p>';
+    const candidatesList = document.getElementById('jd-candidates-list')
+        || document.getElementById('candidates-list');
+    if (candidatesList) {
+        candidatesList.innerHTML = '<p class="text-muted">Select a job description to load candidates.</p>';
+    }
     
     // Reset step indicators
     for (let i = 1; i <= 4; i++) {

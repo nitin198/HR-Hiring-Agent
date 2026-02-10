@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = ((window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || window.location.origin).replace(/\/$/, "");
 
 const SILENCE_THRESHOLD = 0.005;
 const SILENCE_DURATION_MS = 3500;

@@ -1,6 +1,9 @@
 """Ollama LLM service for AI-powered analysis."""
 
+import ast
 import json
+import logging
+import re
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -25,6 +28,7 @@ class OllamaService:
         self.model = model or settings.ollama_model
         self.base_url = base_url or settings.ollama_base_url
         self.timeout = settings.ollama_timeout
+        self.temperature = 0.3
 
         try:
             from langchain_ollama import ChatOllama
@@ -32,12 +36,35 @@ class OllamaService:
             raise RuntimeError("langchain-ollama is required to use OllamaService") from exc
 
         self._llm = ChatOllama(
-            model="kimi-k2.5:cloud",
+            model=self.model,
             base_url=self.base_url,
             streaming=False,
-            temperature=0.3,  # Lower temperature for more consistent analysis
+            temperature=self.temperature,  # Lower temperature for more consistent analysis
             timeout=self.timeout,
         )
+
+    async def _http_invoke(self, messages: list[dict[str, str]]) -> str:
+        import httpx
+
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            "options": {"temperature": self.temperature},
+        }
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(f"{self.base_url}/api/chat", json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+        content = None
+        if isinstance(data, dict):
+            content = (data.get("message") or {}).get("content")
+            if content is None:
+                content = data.get("response")
+        if not content:
+            raise ValueError("Ollama response missing content")
+        return content
 
 
     async def invoke(self, messages: list[dict[str, str]]) -> str:
@@ -66,6 +93,12 @@ class OllamaService:
             response = await self._llm.ainvoke(langchain_messages)
             return response.content
         except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.warning("ChatOllama failed, falling back to HTTP API: %s", e)
+            try:
+                return await self._http_invoke(messages)
+            except Exception:
+                pass
             if "timeout" in str(e).lower() or "timed out" in str(e).lower():
                 raise TimeoutError(f"Ollama request timed out after {self.timeout} seconds") from e
             elif "connection" in str(e).lower() or "refused" in str(e).lower():
@@ -87,6 +120,7 @@ class OllamaService:
             ValueError: If response cannot be parsed as JSON
         """
         response_text = await self.invoke(messages)
+        logger = logging.getLogger(__name__)
 
         # Try to extract JSON from response
         # Handle cases where LLM wraps JSON in markdown code blocks
@@ -103,20 +137,42 @@ class OllamaService:
 
         json_text = json_text.strip()
 
+        def sanitize(text: str) -> str:
+            # Remove trailing commas before } or ]
+            return re.sub(r",\s*([}\]])", r"\1", text)
+
+        def try_json_load(text: str) -> dict[str, Any] | None:
+            try:
+                return json.loads(sanitize(text))
+            except json.JSONDecodeError:
+                return None
+
+        parsed = try_json_load(json_text)
+        if parsed is not None:
+            return parsed
+
+        # Try to find JSON in the text
+        json_match = re.search(r"\{[\s\S]*\}", json_text)
+        if json_match:
+            parsed = try_json_load(json_match.group())
+            if parsed is not None:
+                return parsed
+
+        # Fallback: try Python literal parsing (handles single quotes)
+        alt_text = json_text
+        alt_text = re.sub(r"\bnull\b", "None", alt_text, flags=re.IGNORECASE)
+        alt_text = re.sub(r"\btrue\b", "True", alt_text, flags=re.IGNORECASE)
+        alt_text = re.sub(r"\bfalse\b", "False", alt_text, flags=re.IGNORECASE)
+        alt_text = sanitize(alt_text)
         try:
-            return json.loads(json_text)
-        except json.JSONDecodeError as e:
-            # Try to find JSON in the text
-            import re
+            data = ast.literal_eval(alt_text)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
 
-            json_match = re.search(r"\{[\s\S]*\}", json_text)
-            if json_match:
-                try:
-                    return json.loads(json_match.group())
-                except json.JSONDecodeError:
-                    pass
-
-            raise ValueError(f"Failed to parse LLM response as JSON: {e}\nResponse: {response_text}")
+        logger.warning("Failed to parse LLM JSON response. Raw output: %s", response_text[:1000])
+        raise ValueError("Failed to parse LLM response as JSON.")
 
     async def analyze_resume(self, resume_text: str, jd_text: str) -> dict[str, Any]:
         """

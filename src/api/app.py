@@ -1,9 +1,10 @@
 """Main FastAPI application."""
 
 from contextlib import asynccontextmanager
+import json
 import os
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -114,3 +115,12 @@ async def api_info():
             "interviews": "/interviews",
         },
     }
+
+
+@app.get("/config.js")
+async def frontend_config(request: Request) -> Response:
+    """Return frontend configuration as JavaScript."""
+    base_url = settings.api_base_url or str(request.base_url).rstrip("/")
+    payload = {"API_BASE_URL": base_url}
+    script = f"window.APP_CONFIG = {json.dumps(payload)};"
+    return Response(content=script, media_type="application/javascript")
