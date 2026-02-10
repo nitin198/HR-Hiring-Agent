@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Interview</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/interview.css">
+</head>
+<body>
+    <div class="container interview-container">
+        <header class="mb-4">
+            <h1 class="mb-2">Audio Interview</h1>
+            <p class="text-muted mb-0">Please complete the steps below to start your screening interview.</p>
+        </header>
+
+        <div class="step-indicator mb-4">
+            <div class="step active" id="interview-step-1">
+                <span class="step-number">1</span>
+                <span class="step-label">Instructions</span>
+            </div>
+            <div class="step" id="interview-step-2">
+                <span class="step-number">2</span>
+                <span class="step-label">Details</span>
+            </div>
+            <div class="step" id="interview-step-3">
+                <span class="step-number">3</span>
+                <span class="step-label">Interview</span>
+            </div>
+            <div class="step" id="interview-step-4">
+                <span class="step-number">4</span>
+                <span class="step-label">Summary</span>
+            </div>
+        </div>
+
+        <section class="card step-card" id="step-1-panel">
+            <div class="card-body">
+                <h5 class="mb-3">Instructions</h5>
+                <ul class="text-muted">
+                    <li>Find a quiet place and use a headset if available.</li>
+                    <li>Allow microphone access when prompted.</li>
+                    <li>The AI interviewer will ask questions using voice.</li>
+                    <li>Speak clearly. The interview auto-advances after silence.</li>
+                </ul>
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" id="consent-checkbox">
+                    <label class="form-check-label" for="consent-checkbox">
+                        I consent to an AI-led audio interview and transcript storage.
+                    </label>
+                </div>
+                <button class="btn btn-primary mt-3" id="step-1-next" disabled>Continue</button>
+            </div>
+        </section>
+
+        <section class="card step-card d-none" id="step-2-panel">
+            <div class="card-body">
+                <h5 class="mb-3">Confirm Details</h5>
+                <div class="alert alert-info small mb-3" id="candidate-info">
+                    Candidate ID: <span id="candidate-id-label">-</span>
+                </div>
+                <form id="candidate-details-form">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Notice Period (days)</label>
+                            <input type="number" class="form-control" id="notice-period">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Location</label>
+                            <input type="text" class="form-control" id="candidate-location">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Current CTC</label>
+                            <input type="text" class="form-control" id="current-ctc" placeholder="e.g., 12 LPA">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Expected CTC</label>
+                            <input type="text" class="form-control" id="expected-ctc" placeholder="e.g., 16 LPA">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Joining Preference</label>
+                            <input type="text" class="form-control" id="join-date" placeholder="e.g., Immediate / 30 days">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Willing to Join</label>
+                            <select class="form-select" id="willing-to-join">
+                                <option value="">Select</option>
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
+                <div class="d-flex justify-content-between mt-3">
+                    <button class="btn btn-outline-secondary" id="step-2-back">Back</button>
+                    <button class="btn btn-primary" id="step-2-next">Start Interview</button>
+                </div>
+                <div class="text-muted small mt-2 d-none" id="start-interview-status">
+                    Preparing your interview. Please wait...
+                </div>
+            </div>
+        </section>
+
+        <section class="card step-card d-none" id="step-3-panel">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="mb-0">Interview In Progress</h5>
+                    <span class="badge bg-info" id="question-count">Question 1</span>
+                </div>
+                <div class="question-box mb-3" id="question-text">Preparing your first question...</div>
+                <div class="audio-status mb-3">
+                    <span id="audio-status-text">Waiting for AI voice...</span>
+                    <div class="mic-meter mt-2">
+                        <div class="mic-meter-fill" id="mic-meter-fill"></div>
+                    </div>
+                </div>
+                <audio id="tts-audio" class="d-none"></audio>
+                <div class="d-flex gap-2 mb-3">
+                    <button class="btn btn-outline-secondary" id="play-question">Replay Question</button>
+                    <button class="btn btn-danger" id="stop-answer" disabled>Stop &amp; Next</button>
+                </div>
+                <div class="alert alert-light small mb-0" id="transcript-preview">
+                    Transcript will appear here after each answer.
+                </div>
+            </div>
+        </section>
+
+        <section class="card step-card d-none" id="step-4-panel">
+            <div class="card-body">
+                <h5 class="mb-3">Interview Complete</h5>
+                <div id="summary-content" class="text-muted">Fetching summary...</div>
+            </div>
+        </section>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/interview.js"></script>
+</body>
+</html>

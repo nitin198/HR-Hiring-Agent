@@ -1,0 +1,13 @@
+.env
+.env.*
+*.db
+*.log
+__pycache__/
+.venv/
+venv/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+Thumbs.db
+python-*.exe

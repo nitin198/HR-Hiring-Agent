@@ -1,0 +1,1173 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Smart Hiring Agent</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #0f766e;
+            --secondary-color: #0c4a6e;
+            --success-color: #16a34a;
+            --warning-color: #ea580c;
+            --danger-color: #dc2626;
+            --info-color: #0284c7;
+            --ink-900: #0f172a;
+            --ink-700: #334155;
+            --surface-100: #f8fafc;
+            --surface-200: #f1f5f9;
+            --surface-300: #e2e8f0;
+        }
+
+        body {
+            background: radial-gradient(circle at top, rgba(15, 118, 110, 0.12), transparent 55%),
+                        radial-gradient(circle at 80% 20%, rgba(2, 132, 199, 0.12), transparent 50%),
+                        linear-gradient(180deg, #f8fafc 0%, #e2e8f0 60%, #f8fafc 100%);
+            min-height: 100vh;
+            font-family: "Manrope", "Segoe UI", Tahoma, sans-serif;
+            color: var(--ink-900);
+        }
+
+        .navbar {
+            background: rgba(255, 255, 255, 0.9) !important;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 10px 30px rgba(15, 118, 110, 0.08);
+            border-bottom: 1px solid rgba(15, 118, 110, 0.1);
+        }
+
+        .navbar-brand {
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            color: var(--secondary-color) !important;
+        }
+
+        .main-container {
+            padding: 2.5rem 1.5rem 3.5rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .card {
+            border: 1px solid rgba(15, 118, 110, 0.08);
+            border-radius: 16px;
+            box-shadow: 0 12px 24px rgba(15, 118, 110, 0.08);
+            background: white;
+            margin-bottom: 1.75rem;
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, rgba(15, 118, 110, 0.95), rgba(12, 74, 110, 0.95));
+            color: white;
+            border-radius: 16px 16px 0 0 !important;
+            font-weight: 600;
+            padding: 1.1rem 1.5rem;
+            letter-spacing: 0.02em;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            border: none;
+            padding: 0.6rem 1.6rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            box-shadow: 0 10px 20px rgba(15, 118, 110, 0.2);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 28px rgba(15, 118, 110, 0.25);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--success-color), #15803d);
+            border: none;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--danger-color), #b91c1c);
+            border: none;
+        }
+
+        .btn-outline-primary {
+            border-color: rgba(15, 118, 110, 0.4);
+            color: var(--primary-color);
+        }
+
+        .form-control, .form-select {
+            border-radius: 10px;
+            border: 1px solid var(--surface-300);
+            padding: 0.7rem 0.9rem;
+            background-color: var(--surface-100);
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+            background-color: white;
+        }
+
+        .badge {
+            padding: 0.45rem 0.95rem;
+            border-radius: 999px;
+            font-weight: 600;
+        }
+
+        .badge-strong-hire {
+            background: linear-gradient(135deg, var(--success-color), #15803d);
+            color: white;
+        }
+
+        .badge-borderline {
+            background: linear-gradient(135deg, var(--warning-color), #c2410c);
+            color: white;
+        }
+
+        .badge-reject {
+            background: linear-gradient(135deg, var(--danger-color), #b91c1c);
+            color: white;
+        }
+
+        .badge-pending {
+            background: linear-gradient(135deg, #64748b, #475569);
+            color: white;
+        }
+
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 2.5rem;
+        }
+
+        .loading-spinner.active {
+            display: block;
+        }
+
+        .ai-console {
+            background: linear-gradient(135deg, #0f172a, #111827);
+            border-radius: 16px;
+            padding: 1.5rem;
+            color: #e2e8f0;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.18), 0 20px 40px rgba(15, 23, 42, 0.25);
+            position: relative;
+            overflow: hidden;
+            text-align: left;
+        }
+
+        .ai-console::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top right, rgba(15, 118, 110, 0.15), transparent 55%);
+            pointer-events: none;
+        }
+
+        .ai-console-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .ai-console-title {
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            color: #e2e8f0;
+        }
+
+        .ai-console-status {
+            font-size: 0.75rem;
+            background: rgba(15, 118, 110, 0.2);
+            color: #5eead4;
+            padding: 0.25rem 0.6rem;
+            border-radius: 999px;
+            border: 1px solid rgba(94, 234, 212, 0.3);
+        }
+
+        .ai-console-body {
+            font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            max-height: 260px;
+            overflow: hidden;
+        }
+
+        .ai-pipeline {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(120px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            border-radius: 14px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .ai-pipeline-stage {
+            position: relative;
+            padding: 0.6rem 0.75rem 0.75rem;
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: rgba(15, 23, 42, 0.65);
+            color: #cbd5f5;
+            min-height: 74px;
+        }
+
+        .ai-pipeline-stage.active {
+            border-color: rgba(94, 234, 212, 0.6);
+            background: linear-gradient(135deg, rgba(15, 118, 110, 0.35), rgba(15, 23, 42, 0.75));
+            color: #e2e8f0;
+            box-shadow: 0 8px 18px rgba(15, 118, 110, 0.2);
+        }
+
+        .ai-pipeline-title {
+            font-weight: 600;
+            font-size: 0.85rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .ai-pipeline-progress {
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .ai-pipeline-stage.active .ai-pipeline-progress {
+            color: #5eead4;
+        }
+
+        .ai-pipeline-dot {
+            position: absolute;
+            top: -6px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #5eead4;
+            box-shadow: 0 0 12px rgba(94, 234, 212, 0.8);
+            transition: left 0.4s ease;
+        }
+
+        .ai-console-line {
+            display: flex;
+            gap: 0.6rem;
+            align-items: baseline;
+            margin-bottom: 0.35rem;
+            color: #e2e8f0;
+        }
+
+        .ai-console-timestamp {
+            color: #94a3b8;
+            font-size: 0.75rem;
+            min-width: 62px;
+        }
+
+        .ai-console-caret {
+            display: inline-block;
+            width: 8px;
+            height: 16px;
+            background: #5eead4;
+            margin-left: 4px;
+            animation: blink 1s steps(2, start) infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        .ai-console-footer {
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+
+        .candidate-item {
+            border-left: 4px solid var(--primary-color);
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background: var(--surface-100);
+            border-radius: 12px;
+        }
+
+        .candidate-item.strong-hire {
+            border-left-color: var(--success-color);
+        }
+
+        .candidate-item.borderline {
+            border-left-color: var(--warning-color);
+        }
+
+        .candidate-item.reject {
+            border-left-color: var(--danger-color);
+        }
+
+        .toast-container {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 9999;
+        }
+
+        .step-indicator {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .step {
+            text-align: center;
+            padding: 0.75rem;
+            position: relative;
+            background: white;
+            border-radius: 12px;
+            border: 1px solid var(--surface-300);
+            box-shadow: 0 8px 16px rgba(15, 118, 110, 0.06);
+        }
+
+        .step::after {
+            display: none;
+        }
+
+        .step-number {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: var(--surface-300);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 0.5rem;
+            font-weight: 700;
+            position: relative;
+            z-index: 1;
+        }
+
+        .step.active .step-number {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+        }
+
+        .step.completed .step-number {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .step-label {
+            font-size: 0.85rem;
+            color: var(--ink-700);
+            font-weight: 600;
+        }
+
+        .step.active .step-label {
+            color: var(--primary-color);
+        }
+
+        .step.completed .step-label {
+            color: var(--success-color);
+        }
+
+        .report-section {
+            display: none;
+        }
+
+        .report-section.active {
+            display: block;
+        }
+
+        .score-circle {
+            width: 84px;
+            height: 84px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: white;
+            margin: 0 auto;
+        }
+
+        .score-high {
+            background: linear-gradient(135deg, var(--success-color), #15803d);
+        }
+
+        .score-medium {
+            background: linear-gradient(135deg, var(--warning-color), #c2410c);
+        }
+
+        .score-low {
+            background: linear-gradient(135deg, var(--danger-color), #b91c1c);
+        }
+
+        .metric-card {
+            background: var(--surface-100);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .metric-card.skill-match {
+            border-left-color: var(--success-color);
+        }
+
+        .metric-card.experience {
+            border-left-color: var(--info-color);
+        }
+
+        .metric-card.domain {
+            border-left-color: var(--secondary-color);
+        }
+
+        .metric-card.project-complexity {
+            border-left-color: var(--warning-color);
+        }
+
+        .metric-card.soft-skills {
+            border-left-color: var(--primary-color);
+        }
+
+        .metric-label {
+            font-size: 0.85rem;
+            color: var(--ink-700);
+            font-weight: 600;
+        }
+
+        .metric-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--ink-900);
+        }
+
+        .metric-bar {
+            height: 8px;
+            background: var(--surface-300);
+            border-radius: 999px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+
+        .metric-bar-fill {
+            height: 100%;
+            border-radius: 999px;
+            transition: width 0.3s ease;
+        }
+
+        .interview-strategy-card {
+            background: linear-gradient(135deg, #ecfeff, #e0f2fe);
+            border-radius: 14px;
+            padding: 1.6rem;
+            margin-top: 1rem;
+            border: 2px solid rgba(2, 132, 199, 0.3);
+        }
+
+        .interview-strategy-card.pass {
+            border-color: rgba(22, 163, 74, 0.4);
+            background: linear-gradient(135deg, #ecfdf5, #dcfce7);
+        }
+
+        .interview-strategy-card.fail {
+            border-color: rgba(220, 38, 38, 0.4);
+            background: linear-gradient(135deg, #fef2f2, #fee2e2);
+        }
+
+        .question-badge {
+            display: inline-block;
+            background: var(--primary-color);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-right: 0.5rem;
+        }
+
+        .focus-area-tag {
+            display: inline-block;
+            background: var(--secondary-color);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            margin: 0.25rem;
+        }
+
+        .strength-item {
+            color: var(--success-color);
+            font-weight: 600;
+        }
+
+        .weakness-item {
+            color: var(--warning-color);
+            font-weight: 600;
+        }
+
+        .risk-item {
+            color: var(--danger-color);
+            font-weight: 600;
+        }
+
+        .outlook-table th, .outlook-table td {
+            vertical-align: middle;
+        }
+
+        .outlook-pill {
+            display: inline-block;
+            background: #ecfeff;
+            color: #0e7490;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            margin-right: 0.35rem;
+            margin-bottom: 0.25rem;
+        }
+
+        #device-code-banner {
+            border-radius: 12px;
+            border: 1px solid rgba(2, 132, 199, 0.3);
+            background: #ecfeff;
+            color: #0f172a;
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                padding: 1.5rem 1rem 2.5rem;
+            }
+            
+            .step-label {
+                font-size: 0.75rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-light sticky-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-robot me-2"></i>AI Smart Hiring Agent
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <div id="device-code-banner" class="alert alert-info d-none" role="alert"></div>
+        <!-- Navigation Tabs -->
+        <ul class="nav nav-tabs mb-4" id="mainTabs">
+            <li class="nav-item">
+                <a class="nav-link active" href="#" onclick="showMainTab('workflow')">
+                    <i class="bi bi-robot me-1"></i>Hiring Workflow
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" onclick="showMainTab('job-descriptions')">
+                    <i class="bi bi-briefcase me-1"></i>Job Descriptions
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" onclick="showMainTab('outlook-candidates')">
+                    <i class="bi bi-inbox me-1"></i>New Candidates (Outlook)
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" onclick="showMainTab('candidates-management')">
+                    <i class="bi bi-person-lines-fill me-1"></i>Candidates
+                </a>
+            </li>
+        </ul>
+
+        <!-- Workflow Tab -->
+        <div id="workflow-tab" class="tab-content">
+            <!-- Step Indicator -->
+            <div class="step-indicator">
+            <div class="step active" id="step-1">
+                <div class="step-number">1</div>
+                <div class="step-label">Select Job Description</div>
+            </div>
+            <div class="step" id="step-2">
+                <div class="step-number">2</div>
+                <div class="step-label">Add Candidates</div>
+            </div>
+            <div class="step" id="step-3">
+                <div class="step-number">3</div>
+                <div class="step-label">Analyze</div>
+            </div>
+            <div class="step" id="step-4">
+                <div class="step-number">4</div>
+                <div class="step-label">View Results</div>
+            </div>
+            </div>
+
+        <!-- Step 1: Select Job Description -->
+        <div id="step-1-content" class="card">
+            <div class="card-header">
+                <i class="bi bi-briefcase me-2"></i>Step 1: Select Job Description
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Choose a Job Description *</label>
+                    <select class="form-select" id="selected-jd" required>
+                        <option value="">Select Job Description</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Or Create New Job Description</label>
+                    <button class="btn btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#create-jd-form">
+                        <i class="bi bi-plus me-2"></i>Create New
+                    </button>
+                </div>
+                <div class="collapse" id="create-jd-form">
+                    <form id="jd-form">
+                        <div class="mb-3">
+                            <label class="form-label">Job Title *</label>
+                            <input type="text" class="form-control" id="jd-title" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description *</label>
+                            <textarea class="form-control" id="jd-description" rows="5" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Required Skills (comma-separated)</label>
+                            <input type="text" class="form-control" id="jd-skills" placeholder="Python, FastAPI, SQL">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Min Experience (years)</label>
+                                <input type="number" class="form-control" id="jd-experience" value="0">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Domain</label>
+                                <input type="text" class="form-control" id="jd-domain" placeholder="Software Development">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-plus me-2"></i>Create Job Description
+                        </button>
+                    </form>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-success" id="btn-step-1" disabled>
+                        <i class="bi bi-arrow-right me-2"></i>Next: Add Candidates
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Add Candidates -->
+        <div id="step-2-content" class="card" style="display: none;">
+            <div class="card-header">
+                <i class="bi bi-people me-2"></i>Step 2: Add Candidates
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-12">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0">Select Candidates for Analysis</h5>
+                            <button class="btn btn-outline-primary btn-sm" type="button" id="btn-refresh-jd-candidates">
+                                <i class="bi bi-arrow-repeat me-1"></i>Refresh
+                            </button>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-3 mb-2">
+                                <input type="text" class="form-control" id="step2-filter-name" placeholder="Filter by name">
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <input type="text" class="form-control" id="step2-filter-skills" placeholder="Skills (comma)">
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <input type="number" class="form-control" id="step2-filter-min-exp" placeholder="Min exp">
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <input type="number" class="form-control" id="step2-filter-max-exp" placeholder="Max exp">
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <select class="form-select" id="step2-filter-jd">
+                                    <option value="">All JDs</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <input type="date" class="form-control" id="step2-filter-from">
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <input type="date" class="form-control" id="step2-filter-to">
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <button class="btn btn-outline-primary w-100" type="button" id="step2-filter-apply">
+                                    <i class="bi bi-search me-1"></i>Apply Filters
+                                </button>
+                            </div>
+                        </div>
+                        <div id="jd-candidates-list">
+                            <p class="text-muted">Select a job description to load candidates.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3 d-flex justify-content-between">
+                    <button class="btn btn-outline-secondary" id="btn-back-1">
+                        <i class="bi bi-arrow-left me-2"></i>Back
+                    </button>
+                    <button class="btn btn-success" id="btn-step-2" disabled>
+                        <i class="bi bi-arrow-right me-2"></i>Next: Analyze
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Analyze -->
+        <div id="step-3-content" class="card" style="display: none;">
+            <div class="card-header">
+                <i class="bi bi-magic me-2"></i>Step 3: Analyze Candidates
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <h5>Ready to Analyze</h5>
+                    <p class="text-muted">You have added <span id="candidate-count">0</span> candidates for analysis.</p>
+                </div>
+                <div class="mb-3">
+                    <h5>Job Description</h5>
+                    <div id="selected-jd-info" class="bg-light p-3 rounded">
+                        <p class="text-muted">No job description selected</p>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <h5>Candidates to Analyze</h5>
+                    <div id="candidates-to-analyze">
+                        <p class="text-muted">No candidates to analyze</p>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <button class="btn btn-outline-secondary" id="btn-back-2">
+                        <i class="bi bi-arrow-left me-2"></i>Back
+                    </button>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-primary" id="btn-analyze-selected" disabled>
+                            <i class="bi bi-check2-square me-2"></i>Analyze Selected
+                        </button>
+                        <button class="btn btn-primary" id="btn-analyze" disabled>
+                            <i class="bi bi-magic me-2"></i>Analyze All
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 4: View Results -->
+        <div id="step-4-content" class="card" style="display: none;">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="bi bi-graph-up me-2"></i>Step 4: Analysis Results
+                    </div>
+                    <button class="btn btn-light btn-sm" id="btn-start-over-top" type="button">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Start New Analysis
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="loading-spinner" id="analysis-loading">
+                    <div class="ai-console">
+                        <div class="ai-console-header">
+                            <div class="ai-console-title">AI Hiring Console</div>
+                            <div class="ai-console-status">Processing</div>
+                        </div>
+                        <div class="ai-pipeline" id="ai-pipeline">
+                            <div class="ai-pipeline-dot" id="ai-pipeline-dot"></div>
+                            <div class="ai-pipeline-stage active" data-stage="0">
+                                <div class="ai-pipeline-title">Parse Resume</div>
+                                <div class="ai-pipeline-progress" id="pipeline-progress-0">0%</div>
+                            </div>
+                            <div class="ai-pipeline-stage" data-stage="1">
+                                <div class="ai-pipeline-title">Match JD</div>
+                                <div class="ai-pipeline-progress" id="pipeline-progress-1">0%</div>
+                            </div>
+                            <div class="ai-pipeline-stage" data-stage="2">
+                                <div class="ai-pipeline-title">Score</div>
+                                <div class="ai-pipeline-progress" id="pipeline-progress-2">0%</div>
+                            </div>
+                            <div class="ai-pipeline-stage" data-stage="3">
+                                <div class="ai-pipeline-title">Interview Strategy</div>
+                                <div class="ai-pipeline-progress" id="pipeline-progress-3">0%</div>
+                            </div>
+                        </div>
+                        <div class="ai-console-body" id="ai-console-body">
+                            <!-- Typed events will appear here -->
+                        </div>
+                        <div class="ai-console-footer">
+                            Live telemetry: parsing resumes, matching JD signals, scoring, and generating interview strategy.
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="analysis-results" style="display: none;">
+                    <!-- Summary Stats -->
+                    <div class="row mb-4">
+                        <div class="col-md-3 mb-3">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <h3 class="text-primary" id="stat-total">0</h3>
+                                    <p class="text-muted mb-0">Total Candidates</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <h3 class="text-success" id="stat-strong-hire">0</h3>
+                                    <p class="text-muted mb-0">Strong Hire</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <h3 class="text-warning" id="stat-borderline">0</h3>
+                                    <p class="text-muted mb-0">Borderline</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <h3 class="text-danger" id="stat-reject">0</h3>
+                                    <p class="text-muted mb-0">Reject</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Report Tabs -->
+                    <ul class="nav nav-tabs mb-3" id="reportTabs">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="#" onclick="showReportTab('summary')">
+                                <i class="bi bi-list-check me-1"></i>Summary
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showReportTab('ranking')">
+                                <i class="bi bi-trophy me-1"></i>Ranking
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showReportTab('detailed')">
+                                <i class="bi bi-file-text me-1"></i>Detailed Analysis
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- Summary Tab -->
+                    <div id="summary-tab" class="report-section active">
+                        <h5 class="mb-3">Candidate Summary</h5>
+                        <div id="summary-results">
+                            <p class="text-muted">No results yet</p>
+                        </div>
+                    </div>
+
+                    <!-- Ranking Tab -->
+                    <div id="ranking-tab" class="report-section">
+                        <h5 class="mb-3">Candidate Ranking</h5>
+                        <div id="ranking-results">
+                            <p class="text-muted">No results yet</p>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Analysis Tab -->
+                    <div id="detailed-tab" class="report-section">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0">Detailed Analysis</h5>
+                            <button class="btn btn-outline-primary btn-sm" id="btn-download-all-pdfs" onclick="downloadAllCandidatePdfs()" disabled>
+                                <i class="bi bi-download me-1"></i>Download All PDFs
+                            </button>
+                        </div>
+                        <div id="detailed-results">
+                            <p class="text-muted">No results yet</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <button class="btn btn-outline-primary" id="btn-start-over">
+                            <i class="bi bi-arrow-clockwise me-2"></i>Start New Analysis
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
+
+        <!-- Job Descriptions Management Tab -->
+        <div id="job-descriptions-tab" class="tab-content" style="display: none;">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-briefcase me-2"></i>Job Descriptions Management</h5>
+                    <button class="btn btn-primary btn-sm" onclick="showCreateJdModal()">
+                        <i class="bi bi-plus me-1"></i>Create New
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="jd-list-container">
+                        <p class="text-muted">Loading job descriptions...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Outlook Candidates Tab -->
+        <div id="outlook-candidates-tab" class="tab-content" style="display: none;">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-inbox me-2"></i>New Candidates (Outlook)</h5>
+                    <button class="btn btn-primary btn-sm" type="button" onclick="syncOutlookCandidates()">
+                        <i class="bi bi-arrow-repeat me-1"></i>Sync Outlook
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="outlook-candidates-list">
+                        <p class="text-muted">No Outlook candidates loaded</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Candidates Management Tab -->
+        <div id="candidates-management-tab" class="tab-content" style="display: none;">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-person-plus me-2"></i>Add Candidate
+                </div>
+                <div class="card-body">
+                    <form id="candidate-management-form">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Name *</label>
+                                <input type="text" class="form-control" id="cm-name" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Email</label>
+                                <input type="email" class="form-control" id="cm-email">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Phone</label>
+                                <input type="tel" class="form-control" id="cm-phone">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                            <label class="form-label">Job Description (optional)</label>
+                            <select class="form-select" id="cm-jd">
+                                <option value="">No JD selected</option>
+                            </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Resume File *</label>
+                                <input type="file" class="form-control" id="cm-resume" accept=".pdf,.doc,.docx,.txt" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-plus me-2"></i>Add Candidate
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-folder2-open me-2"></i>Bulk Folder Upload
+                </div>
+                <div class="card-body">
+                    <div class="row align-items-end">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Job Description (optional)</label>
+                            <select class="form-select" id="cm-folder-jd">
+                                <option value="">No JD selected</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Select Folder</label>
+                            <input type="file" class="form-control" id="cm-folder" webkitdirectory multiple>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Or Select Multiple Files</label>
+                            <input type="file" class="form-control" id="cm-files" multiple accept=".pdf,.doc,.docx,.txt">
+                        </div>
+                    </div>
+                    <button class="btn btn-outline-primary" type="button" id="cm-folder-upload">
+                        <i class="bi bi-upload me-2"></i>Upload Folder
+                    </button>
+                    <div class="progress mt-3 d-none" id="cm-folder-progress">
+                        <div class="progress-bar" role="progressbar" style="width: 0%" id="cm-folder-progress-bar">0%</div>
+                    </div>
+                    <div class="small text-muted mt-2 d-none" id="cm-folder-progress-text">Uploading...</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-funnel me-2"></i>Filter Candidates
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Name</label>
+                            <input type="text" class="form-control" id="cm-filter-name">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Skills</label>
+                            <input type="text" class="form-control" id="cm-filter-skills" placeholder="Python, SQL">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Min Experience</label>
+                            <input type="number" class="form-control" id="cm-filter-min-exp">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Max Experience</label>
+                            <input type="number" class="form-control" id="cm-filter-max-exp">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Job Description</label>
+                            <select class="form-select" id="cm-filter-jd">
+                                <option value="">All</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn btn-outline-primary" type="button" id="cm-filter-apply">
+                        <i class="bi bi-search me-2"></i>Apply Filters
+                    </button>
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-people me-2"></i>Candidate List</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <select class="form-select form-select-sm" id="cm-bulk-link-jd" style="min-width: 200px;">
+                            <option value="">Link selected to JD...</option>
+                        </select>
+                        <button class="btn btn-outline-success btn-sm" type="button" id="cm-bulk-link">
+                            <i class="bi bi-link-45deg me-1"></i>Link JD
+                        </button>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="cm-select-all">
+                            <label class="form-check-label small" for="cm-select-all">Select All</label>
+                        </div>
+                        <button class="btn btn-outline-danger btn-sm" type="button" id="cm-bulk-delete">
+                            <i class="bi bi-trash me-1"></i>Delete Selected
+                        </button>
+                        <button class="btn btn-primary btn-sm" type="button" onclick="loadCandidatesManagement()">
+                            <i class="bi bi-arrow-repeat me-1"></i>Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="cm-candidate-list">
+                        <p class="text-muted">No candidates loaded.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Job Description Modal -->
+    <div class="modal fade" id="jdModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="jdModalTitle">Create Job Description</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="jd-modal-form">
+                        <input type="hidden" id="jd-modal-id">
+                        <div class="mb-3">
+                            <label class="form-label">Job Title *</label>
+                            <input type="text" class="form-control" id="jd-modal-title" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description *</label>
+                            <textarea class="form-control" id="jd-modal-description" rows="5" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Required Skills (comma-separated)</label>
+                            <input type="text" class="form-control" id="jd-modal-skills" placeholder="Python, FastAPI, SQL">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Min Experience (years)</label>
+                                <input type="number" class="form-control" id="jd-modal-experience" value="0">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Domain</label>
+                                <input type="text" class="form-control" id="jd-modal-domain" placeholder="Software Development">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveJobDescription()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Job Description Modal -->
+    <div class="modal fade" id="viewJdModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="viewJdModalTitle">Job Description Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="view-jd-content">
+                        <!-- Content will be loaded dynamically -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Candidate Detail Modal -->
+    <div class="modal fade" id="candidateModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="candidateModalTitle">Candidate Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="candidate-modal-body">
+                    <p class="text-muted">Loading candidate...</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>

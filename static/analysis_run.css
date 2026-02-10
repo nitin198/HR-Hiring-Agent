@@ -1,0 +1,40 @@
+:root {
+    --primary: #0f766e;
+    --secondary: #0c4a6e;
+    --ink: #0f172a;
+    --muted: #64748b;
+    --border: #e2e8f0;
+}
+
+body {
+    background: radial-gradient(circle at top, rgba(15, 118, 110, 0.12), transparent 55%),
+                radial-gradient(circle at 80% 20%, rgba(2, 132, 199, 0.12), transparent 50%),
+                linear-gradient(180deg, #f8fafc 0%, #e2e8f0 60%, #f8fafc 100%);
+    font-family: "Manrope", "Segoe UI", Tahoma, sans-serif;
+    color: var(--ink);
+    min-height: 100vh;
+}
+
+.analysis-container {
+    max-width: 1000px;
+    padding: 2.5rem 1.5rem 3.5rem;
+}
+
+.card {
+    border: 1px solid rgba(15, 118, 110, 0.08);
+    border-radius: 16px;
+    box-shadow: 0 12px 24px rgba(15, 118, 110, 0.08);
+}
+
+.label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.value {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
