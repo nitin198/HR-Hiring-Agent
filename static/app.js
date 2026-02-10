@@ -1670,6 +1670,7 @@ async function loadCandidatesManagement() {
                             ${resumeLink}
                             ${reviewLink}
                             <button class="btn btn-sm btn-outline-secondary" onclick="viewCandidateDetail(${candidate.id})">View</button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="openEditCandidate(${candidate.id})">Edit</button>
                             <button class="btn btn-sm btn-danger" onclick="deleteCandidate(${candidate.id})">Delete</button>
                         </div>
                     </div>
@@ -1742,6 +1743,9 @@ async function viewCandidateDetail(candidateId) {
                 <p class="mb-1"><strong>Email:</strong> ${candidate.email || 'N/A'}</p>
                 <p class="mb-1"><strong>Phone:</strong> ${candidate.phone || 'N/A'}</p>
                 ${resumeLink}
+                <div class="mt-2">
+                    <button class="btn btn-sm btn-outline-primary" onclick="openEditCandidate(${candidate.id})">Edit Candidate</button>
+                </div>
             </div>
             <div class="mb-3">
                 <h6>Profile</h6>
@@ -1764,6 +1768,63 @@ async function viewCandidateDetail(candidateId) {
         modal.show();
     } catch (error) {
         showToast(`Failed to load candidate detail: ${error.message}`, 'danger');
+    }
+}
+
+async function openEditCandidate(candidateId) {
+    try {
+        const detail = await apiCall(`/api/candidates/${candidateId}`);
+        const candidate = detail.candidate || detail || {};
+        document.getElementById('edit-candidate-id').value = candidate.id || candidateId;
+        document.getElementById('edit-candidate-name').value = candidate.name || '';
+        document.getElementById('edit-candidate-email').value = candidate.email || '';
+        document.getElementById('edit-candidate-phone').value = candidate.phone || '';
+        const modalEl = document.getElementById('editCandidateModal');
+        if (modalEl) {
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+    } catch (error) {
+        showToast(`Failed to load candidate: ${error.message}`, 'danger');
+    }
+}
+
+async function saveCandidateEdits() {
+    const candidateId = document.getElementById('edit-candidate-id').value;
+    const name = document.getElementById('edit-candidate-name').value;
+    const email = document.getElementById('edit-candidate-email').value;
+    const phone = document.getElementById('edit-candidate-phone').value;
+
+    if (!candidateId) {
+        showToast('Missing candidate ID.', 'danger');
+        return;
+    }
+
+    try {
+        const formData = new FormData();
+        formData.append('name', name);
+        formData.append('email', email);
+        formData.append('phone', phone);
+
+        const response = await fetch(`${API_BASE_URL}/api/candidates/${candidateId}`, {
+            method: 'PUT',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Update failed');
+        }
+
+        showToast('Candidate updated');
+        const modalEl = document.getElementById('editCandidateModal');
+        if (modalEl) {
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            modal?.hide();
+        }
+        loadCandidatesManagement();
+    } catch (error) {
+        showToast(`Failed to update candidate: ${error.message}`, 'danger');
     }
 }
 
