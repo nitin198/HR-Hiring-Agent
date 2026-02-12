@@ -544,6 +544,42 @@
             color: #0f172a;
         }
 
+        .compact-filter {
+            padding: 1rem 1.25rem;
+        }
+
+        .compact-filter .form-label {
+            font-size: 0.8rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .compact-filter .form-control,
+        .compact-filter .form-select {
+            padding: 0.45rem 0.7rem;
+            font-size: 0.9rem;
+        }
+
+        .compact-filter .mb-3 {
+            margin-bottom: 0.6rem !important;
+        }
+
+        .compact-filter .row {
+            row-gap: 0.35rem;
+        }
+
+        .compact-filter-row {
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+
+        .compact-filter .col-auto {
+            min-width: 120px;
+        }
+
+        .compact-filter .btn {
+            padding: 0.45rem 1rem;
+        }
+
         @media (max-width: 768px) {
             .main-container {
                 padding: 1.5rem 1rem 2.5rem;
@@ -946,6 +982,72 @@
 
         <!-- Candidates Management Tab -->
         <div id="candidates-management-tab" class="tab-content" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-funnel me-2"></i>Filter Candidates
+                </div>
+                <div class="card-body compact-filter">
+                    <div class="row compact-filter-row align-items-end">
+                        <div class="col-auto">
+                            <label class="form-label">Name</label>
+                            <input type="text" class="form-control form-control-sm" id="cm-filter-name">
+                        </div>
+                        <div class="col-auto">
+                            <label class="form-label">Skills</label>
+                            <input type="text" class="form-control form-control-sm" id="cm-filter-skills" placeholder="Python, SQL">
+                        </div>
+                        <div class="col-auto">
+                            <label class="form-label">Min Exp</label>
+                            <input type="number" class="form-control form-control-sm" id="cm-filter-min-exp">
+                        </div>
+                        <div class="col-auto">
+                            <label class="form-label">Max Exp</label>
+                            <input type="number" class="form-control form-control-sm" id="cm-filter-max-exp">
+                        </div>
+                        <div class="col-auto">
+                            <label class="form-label">Job Description</label>
+                            <select class="form-select form-select-sm" id="cm-filter-jd">
+                                <option value="">All</option>
+                            </select>
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-outline-primary btn-sm" type="button" id="cm-filter-apply">
+                                <i class="bi bi-search me-2"></i>Apply Filters
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-people me-2"></i>Candidate List</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <select class="form-select form-select-sm" id="cm-bulk-link-jd" style="min-width: 200px;">
+                            <option value="">Link selected to JD...</option>
+                        </select>
+                        <button class="btn btn-outline-success btn-sm" type="button" id="cm-bulk-link">
+                            <i class="bi bi-link-45deg me-1"></i>Link JD
+                        </button>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="cm-select-all">
+                            <label class="form-check-label small" for="cm-select-all">Select All</label>
+                        </div>
+                        <button class="btn btn-outline-danger btn-sm" type="button" id="cm-bulk-delete">
+                            <i class="bi bi-trash me-1"></i>Delete Selected
+                        </button>
+                        <button class="btn btn-primary btn-sm" type="button" onclick="loadCandidatesManagement()">
+                            <i class="bi bi-arrow-repeat me-1"></i>Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="cm-candidate-list">
+                        <p class="text-muted">No candidates loaded.</p>
+                    </div>
+                </div>
+            </div>
+
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="bi bi-person-plus me-2"></i>Add Candidate
@@ -1013,70 +1115,6 @@
                         <div class="progress-bar" role="progressbar" style="width: 0%" id="cm-folder-progress-bar">0%</div>
                     </div>
                     <div class="small text-muted mt-2 d-none" id="cm-folder-progress-text">Uploading...</div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <i class="bi bi-funnel me-2"></i>Filter Candidates
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-3 mb-3">
-                            <label class="form-label">Name</label>
-                            <input type="text" class="form-control" id="cm-filter-name">
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <label class="form-label">Skills</label>
-                            <input type="text" class="form-control" id="cm-filter-skills" placeholder="Python, SQL">
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <label class="form-label">Min Experience</label>
-                            <input type="number" class="form-control" id="cm-filter-min-exp">
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <label class="form-label">Max Experience</label>
-                            <input type="number" class="form-control" id="cm-filter-max-exp">
-                        </div>
-                        <div class="col-md-3 mb-3">
-                            <label class="form-label">Job Description</label>
-                            <select class="form-select" id="cm-filter-jd">
-                                <option value="">All</option>
-                            </select>
-                        </div>
-                    </div>
-                    <button class="btn btn-outline-primary" type="button" id="cm-filter-apply">
-                        <i class="bi bi-search me-2"></i>Apply Filters
-                    </button>
-                </div>
-            </div>
-
-            <div class="card mt-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-people me-2"></i>Candidate List</h5>
-                    <div class="d-flex align-items-center gap-2">
-                        <select class="form-select form-select-sm" id="cm-bulk-link-jd" style="min-width: 200px;">
-                            <option value="">Link selected to JD...</option>
-                        </select>
-                        <button class="btn btn-outline-success btn-sm" type="button" id="cm-bulk-link">
-                            <i class="bi bi-link-45deg me-1"></i>Link JD
-                        </button>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="cm-select-all">
-                            <label class="form-check-label small" for="cm-select-all">Select All</label>
-                        </div>
-                        <button class="btn btn-outline-danger btn-sm" type="button" id="cm-bulk-delete">
-                            <i class="bi bi-trash me-1"></i>Delete Selected
-                        </button>
-                        <button class="btn btn-primary btn-sm" type="button" onclick="loadCandidatesManagement()">
-                            <i class="bi bi-arrow-repeat me-1"></i>Refresh
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div id="cm-candidate-list">
-                        <p class="text-muted">No candidates loaded.</p>
-                    </div>
                 </div>
             </div>
         </div>
