@@ -169,6 +169,38 @@ class OutlookAttachRequest(BaseModel):
     outlook_candidate_ids: list[int]
 
 
+class GmailLogEntryResponse(BaseModel):
+    """Schema for a Gmail activity log entry."""
+
+    timestamp: str
+    level: str
+    action: str
+    message: str
+    details: dict[str, Any] | None = None
+
+
+class GmailIngestResponse(BaseModel):
+    """Schema for Gmail ingestion response."""
+
+    status: str
+    trigger: str
+    processed_messages: int
+    processed_attachments: int
+    created_candidates: int
+    skipped_candidates: int
+    analyzed_candidates: int = 0
+    no_jd_match_candidates: int = 0
+    analysis_errors: int = 0
+    errors: list[str]
+    imported_candidates: list[CandidateResponse] = Field(default_factory=list)
+
+
+class GmailLogsResponse(BaseModel):
+    """Schema for Gmail logs response."""
+
+    logs: list[GmailLogEntryResponse] = Field(default_factory=list)
+
+
 # Analysis Schemas
 class CandidateAnalysisResponse(BaseModel):
     """Schema for candidate analysis response."""

@@ -9,6 +9,8 @@ let jdCandidatesCache = [];
 let analysisResults = null;
 let outlookCandidates = [];
 let outlookSelection = new Set();
+let gmailImportedCandidates = [];
+let gmailSyncLogs = [];
 let aiConsoleTimer = null;
 let aiConsoleCursor = 0;
 let aiConsoleLinesRendered = 0;
@@ -45,6 +47,27 @@ function showToast(message, type = 'success') {
 
 function formatScore(value) {
     return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(2) : 'N/A';
+}
+
+function formatIstDateTime(value) {
+    if (!value) {
+        return 'N/A';
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return value;
+    }
+    const formatted = new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+    }).format(date);
+    return `${formatted} IST`;
 }
 
 function formatCandidateName(name) {
@@ -391,7 +414,7 @@ async function loadCandidatesForSelectedJd() {
             html += `
                 <div class="list-group-item d-flex justify-content-between align-items-center">
                     <div>
-                        <h6 class="mb-1">${formatCandidateName(candidate.name)}</h6>
+                        <h6 class="mb-1">${formatCandidateName(candidate.name)} <span class="text-muted small">(ID: ${candidate.id})</span></h6>
                         <small class="text-muted">${candidate.email || 'No email'} • ${candidate.phone || 'No phone'}</small>
                     </div>
                     <input type="checkbox" class="form-check-input jd-candidate-checkbox" data-candidate-id="${candidate.id}">
@@ -452,7 +475,7 @@ loadCandidatesForSelectedJd = async () => {
             html += `
                 <div class="list-group-item d-flex justify-content-between align-items-center">
                     <div>
-                        <h6 class="mb-1">${formatCandidateName(candidate.name)}</h6>
+                        <h6 class="mb-1">${formatCandidateName(candidate.name)} <span class="text-muted small">(ID: ${candidate.id})</span></h6>
                         <small class="text-muted">${headline} • ${exp}</small>
                         <div class="mt-1">${linkBadges}</div>
                     </div>
@@ -512,7 +535,7 @@ document.getElementById('btn-step-2').addEventListener('click', () => {
         candidatesHtml += `
             <div class="candidate-item d-flex justify-content-between align-items-center">
                 <div>
-                        <h6 class="mb-1">${formatCandidateName(candidate.name)}</h6>
+                        <h6 class="mb-1">${formatCandidateName(candidate.name)} <span class="text-muted small">(ID: ${candidate.id})</span></h6>
                     <small class="text-muted">${candidate.email || 'No email'}</small>
                 </div>
                 <input type="checkbox" class="form-check-input analyze-checkbox" data-candidate-id="${candidate.id}" checked>
@@ -1094,6 +1117,11 @@ function showMainTab(tabName) {
         loadOutlookCandidates(true);
     }
 
+    if (tabName === 'gmail-candidates') {
+        renderGmailCandidatesList(gmailImportedCandidates);
+        loadGmailLogs();
+    }
+
     if (tabName === 'interview-reviews') {
         loadInterviewSummaries();
     }
@@ -1149,6 +1177,175 @@ async function syncOutlookCandidates() {
     } catch (error) {
         showToast('Failed to sync IMAP: ' + error.message, 'danger');
     }
+}
+
+async function syncGmailCandidates() {
+    try {
+        const result = await apiCall('/api/gmail/ingest', { method: 'POST' });
+        gmailImportedCandidates = result.imported_candidates || [];
+        await loadGmailLogs();
+
+        const errorCount = result.errors ? result.errors.length : 0;
+        const message = `Gmail sync complete: ${result.created_candidates} imported, ${result.analyzed_candidates || 0} analyzed, ${result.no_jd_match_candidates || 0} with no JD match.`;
+        showToast(errorCount > 0 ? `${message} (${errorCount} errors)` : message, errorCount > 0 ? 'warning' : 'success');
+
+        loadCandidatesManagement();
+    } catch (error) {
+        showToast('Failed to sync Gmail: ' + error.message, 'danger');
+    }
+}
+
+async function loadGmailLogs() {
+    try {
+        const response = await apiCall('/api/gmail/logs?limit=200');
+        gmailSyncLogs = response.logs || [];
+        renderGmailLogs(gmailSyncLogs);
+    } catch (error) {
+        const container = document.getElementById('gmail-sync-logs');
+        if (container) {
+            container.innerHTML = `<div class="alert alert-danger">Failed to load Gmail logs: ${error.message}</div>`;
+        }
+    }
+}
+
+function renderRecentGmailSyncs(logs) {
+    const container = document.getElementById('gmail-sync-summary');
+    if (!container) {
+        return;
+    }
+
+    const syncRuns = (logs || []).filter(entry => entry.action === 'sync_completed').slice(0, 6);
+    if (syncRuns.length === 0) {
+        container.innerHTML = '<p class="text-muted">No sync runs yet.</p>';
+        return;
+    }
+
+    let html = '<div class="list-group">';
+    syncRuns.forEach(run => {
+        const details = run.details || {};
+        const ts = formatIstDateTime(run.timestamp);
+        html += `
+            <div class="list-group-item">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <strong>${(details.trigger || 'manual').toUpperCase()} Sync</strong>
+                    <small class="text-muted">${ts}</small>
+                </div>
+                <div class="small">
+                    Imported: <strong>${details.created_candidates ?? 0}</strong> ?
+                    Analyzed: <strong>${details.analyzed_candidates ?? 0}</strong> ?
+                    No JD Match: <strong>${details.no_jd_match_candidates ?? 0}</strong> ?
+                    Errors: <strong>${details.analysis_errors ?? 0}</strong>
+                </div>
+                <div class="small text-muted mt-1">
+                    Messages: ${details.processed_messages ?? 0}, Attachments: ${details.processed_attachments ?? 0}, Skipped: ${details.skipped_candidates ?? 0}
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function openCandidateFromGmailLog(candidateId) {
+    if (!candidateId) {
+        showToast('Candidate ID not available in this log entry', 'warning');
+        return;
+    }
+    viewCandidateDetail(candidateId);
+}
+
+function renderGmailLogs(logs) {
+    renderRecentGmailSyncs(logs);
+
+    const container = document.getElementById('gmail-sync-logs');
+    if (!container) {
+        return;
+    }
+
+    if (!logs || logs.length === 0) {
+        container.innerHTML = '<p class="text-muted">No Gmail sync logs yet.</p>';
+        return;
+    }
+
+    const levelClass = {
+        info: 'bg-info-subtle text-info-emphasis',
+        warning: 'bg-warning-subtle text-warning-emphasis',
+        error: 'bg-danger-subtle text-danger-emphasis',
+    };
+
+    let html = '<div class="list-group">';
+    logs.forEach(entry => {
+        const badgeClass = levelClass[entry.level] || 'bg-light text-dark';
+        const ts = formatIstDateTime(entry.timestamp);
+        const candidateId = entry.details && entry.details.candidate_id ? Number(entry.details.candidate_id) : null;
+        const candidateAction = candidateId
+            ? `<button class="btn btn-sm btn-outline-primary" onclick="openCandidateFromGmailLog(${candidateId})">Open Candidate</button>`
+            : '';
+        html += `
+            <div class="list-group-item">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div>
+                        <span class="badge ${badgeClass}">${(entry.level || 'info').toUpperCase()}</span>
+                        <strong class="ms-2">${entry.action || 'event'}</strong>
+                    </div>
+                    <small class="text-muted">${ts}</small>
+                </div>
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>${entry.message || ''}</div>
+                    <div>${candidateAction}</div>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function renderGmailCandidatesList(candidates) {
+    const container = document.getElementById('gmail-candidates-list');
+    if (!container) {
+        return;
+    }
+
+    if (!candidates || candidates.length === 0) {
+        container.innerHTML = '<p class="text-muted">No Gmail candidates imported in this session.</p>';
+        return;
+    }
+
+    let html = `
+        <div class="table-responsive">
+            <table class="table outlook-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Added At</th>
+                        <th>Resume</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    candidates.forEach(candidate => {
+        const resumeLink = candidate.resume_file_path
+            ? `<a class="btn btn-sm btn-outline-primary" href="${API_BASE_URL}/api/candidates/${candidate.id}/resume" target="_blank">Download</a>`
+            : '<span class="text-muted">N/A</span>';
+        html += `
+            <tr>
+                <td>${formatCandidateName(candidate.name)}</td>
+                <td>${candidate.email || 'N/A'}</td>
+                <td>${candidate.created_at ? new Date(candidate.created_at).toLocaleString() : 'N/A'}</td>
+                <td>${resumeLink}</td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    container.innerHTML = html;
 }
 
 function renderOutlookCandidatesList(candidates) {
@@ -1661,7 +1858,7 @@ async function loadCandidatesManagement() {
                         <div>
                             <div class="d-flex align-items-center gap-2">
                                 <input class="form-check-input cm-select" type="checkbox" data-candidate-id="${candidate.id}">
-                            <h6 class="mb-1">${formatCandidateName(candidate.name)}${invalidBadge}</h6>
+                            <h6 class="mb-1">${formatCandidateName(candidate.name)} <span class="text-muted small">(ID: ${candidate.id})</span>${invalidBadge}</h6>
                             </div>
                             <small class="text-muted">${headline} • ${exp}</small>
                             <div class="mt-1">${linkBadges}</div>
@@ -1739,7 +1936,7 @@ async function viewCandidateDetail(candidateId) {
         body.innerHTML = `
             <div class="mb-3">
                 <h6>Basic Details</h6>
-                <p class="mb-1"><strong>Name:</strong> ${formatCandidateName(candidate.name) || 'N/A'}</p>
+                <p class="mb-1"><strong>Name:</strong> ${formatCandidateName(candidate.name) || 'N/A'}</p>\n                <p class="mb-1"><strong>Candidate ID:</strong> ${candidate.id || 'N/A'}</p>
                 <p class="mb-1"><strong>Email:</strong> ${candidate.email || 'N/A'}</p>
                 <p class="mb-1"><strong>Phone:</strong> ${candidate.phone || 'N/A'}</p>
                 ${resumeLink}

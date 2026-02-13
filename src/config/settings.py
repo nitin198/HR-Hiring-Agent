@@ -66,6 +66,28 @@ class Settings(BaseSettings):
     outlook_imap_folder: str = Field(default="INBOX", description="IMAP folder to scan")
     outlook_imap_use_ssl: bool = Field(default=True, description="Use SSL for IMAP")
 
+    # Gmail IMAP
+    gmail_enabled: bool = Field(default=False, description="Enable Gmail IMAP ingestion")
+    gmail_imap_host: str = Field(default="imap.gmail.com", description="IMAP host for Gmail")
+    gmail_imap_port: int = Field(default=993, description="IMAP port for Gmail")
+    gmail_imap_user: str | None = Field(default=None, description="Gmail username")
+    gmail_imap_password: str | None = Field(default=None, description="Gmail app password")
+    gmail_imap_folder: str = Field(default="INBOX", description="IMAP folder to scan")
+    gmail_imap_use_ssl: bool = Field(default=True, description="Use SSL for Gmail IMAP")
+    gmail_sender_filter: str = Field(
+        default="tanvir.k@idsil.com",
+        description="Sender email filter for Gmail ingestion",
+    )
+    gmail_max_messages: int = Field(default=50, description="Max unread Gmail messages to scan per sync")
+    gmail_sync_interval_minutes: int = Field(
+        default=60,
+        description="Automatic Gmail sync interval in minutes",
+    )
+    gmail_allowed_extensions_csv: str = Field(
+        default=".pdf,.doc,.docx,.txt",
+        description="Allowed Gmail attachment extensions (comma-separated)",
+    )
+
     @property
     def outlook_allowed_extensions(self) -> set[str]:
         """Return allowed Outlook attachment extensions."""
@@ -75,6 +97,15 @@ class Settings(BaseSettings):
     def outlook_device_scopes(self) -> list[str]:
         """Return delegated scopes for device code auth."""
         return [scope.strip() for scope in self.outlook_device_scopes_csv.split(",") if scope.strip()]
+
+    @property
+    def gmail_allowed_extensions(self) -> set[str]:
+        """Return allowed Gmail attachment extensions."""
+        return {
+            ext.strip().lower()
+            for ext in self.gmail_allowed_extensions_csv.split(",")
+            if ext.strip()
+        }
 
     # Scoring Weights (must sum to 100)
     weight_skill_match: int = Field(default=40, description="Weight for skill matching")

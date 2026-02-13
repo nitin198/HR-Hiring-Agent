@@ -245,6 +245,91 @@ async def _find_duplicate_candidate(
     return result.scalar_one_or_none()
 
 
+async def create_candidate_from_resume_bytes(
+    db: AsyncSession,
+    filename: str,
+    content: bytes,
+    *,
+    name: str | None = None,
+    email: str | None = None,
+    phone: str | None = None,
+    job_description_id: int | None = None,
+    ollama: OllamaService | None = None,
+) -> Candidate | None:
+    """
+    Create a candidate from raw resume bytes using the same logic as upload flow.
+
+    Returns None when a duplicate candidate is detected.
+    Raises ValueError for unsupported/invalid resume files.
+    """
+    if job_description_id is not None:
+        jd_result = await db.execute(
+            select(JobDescription).where(JobDescription.id == job_description_id)
+        )
+        if not jd_result.scalar_one_or_none():
+            raise ValueError("Job description not found")
+
+    parser = ResumeParser()
+    resume_text = parser.parse_and_clean(filename, content)
+    invalid_resume = not _is_likely_resume(resume_text)
+    extracted_name = _extract_name(resume_text)
+    resolved_name = (name or "").strip() or extracted_name
+
+    llm = ollama or OllamaService()
+    if resume_text and (not resolved_name or not _is_valid_name(resolved_name)):
+        try:
+            first_lines = "\n".join(
+                [line for line in (resume_text or "").splitlines() if line.strip()][:20]
+            )
+            llm_name = await llm.extract_candidate_name(first_lines or resume_text)
+            resolved_name = _normalize_name((llm_name or {}).get("name"))
+            if not _is_valid_name(resolved_name):
+                resolved_name = None
+        except Exception:
+            resolved_name = None
+
+    if not resolved_name or not _is_valid_name(resolved_name):
+        resolved_name = _normalize_name(os.path.splitext(filename or "")[0])
+    if not resolved_name or not _is_valid_name(resolved_name):
+        resolved_name = "Candidate"
+
+    stored_path = _save_resume_file(filename, content, resolved_name)
+    resolved_email = email or _extract_email(resume_text)
+    resolved_phone = phone or _extract_phone(resume_text)
+
+    duplicate = await _find_duplicate_candidate(db, resolved_name, resolved_email)
+    if duplicate:
+        return None
+
+    candidate = Candidate(
+        name=resolved_name,
+        email=resolved_email,
+        phone=resolved_phone,
+        resume_text=resume_text,
+        resume_file_path=stored_path,
+        job_description_id=job_description_id,
+    )
+    db.add(candidate)
+    await db.flush()
+
+    await _build_profile(candidate.id, resume_text, llm, invalid_resume, db)
+    if job_description_id is not None:
+        db.add(
+            CandidateJobLink(
+                candidate_id=candidate.id,
+                job_description_id=job_description_id,
+                confidence=1.0,
+                linked_by="manual",
+            )
+        )
+    else:
+        await _auto_link_candidate_to_jds(db, candidate.id, resume_text)
+
+    await db.commit()
+    await db.refresh(candidate)
+    return candidate
+
+
 @router.post("", response_model=CandidateResponse, status_code=201)
 async def create_candidate(
     candidate_data: CandidateCreate,
@@ -327,81 +412,27 @@ async def upload_candidate_resume(
     Raises:
         HTTPException: If job description not found or file format not supported
     """
-    # Verify job description if provided
-    if job_description_id is not None:
-        jd_result = await db.execute(
-            select(JobDescription).where(JobDescription.id == job_description_id)
-        )
-        if not jd_result.scalar_one_or_none():
-            raise HTTPException(status_code=404, detail="Job description not found")
-
-    # Parse uploaded file
     content = await file.read()
-    parser = ResumeParser()
-
     try:
-        resume_text = parser.parse_and_clean(file.filename, content)
+        candidate = await create_candidate_from_resume_bytes(
+            db=db,
+            filename=file.filename or "resume.txt",
+            content=content,
+            name=name,
+            email=email,
+            phone=phone,
+            job_description_id=job_description_id,
+            ollama=OllamaService(),
+        )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        detail = str(e)
+        if detail == "Job description not found":
+            raise HTTPException(status_code=404, detail=detail)
+        raise HTTPException(status_code=400, detail=detail)
 
-    invalid_resume = not _is_likely_resume(resume_text)
-    extracted_name = _extract_name(resume_text)
-    resolved_name = (name or "").strip() or extracted_name
-
-    ollama = OllamaService()
-    if resume_text and (not resolved_name or not _is_valid_name(resolved_name)):
-        try:
-            first_lines = "\n".join(
-                [line for line in (resume_text or "").splitlines() if line.strip()][:20]
-            )
-            llm_name = await ollama.extract_candidate_name(first_lines or resume_text)
-            resolved_name = _normalize_name((llm_name or {}).get("name"))
-            if not _is_valid_name(resolved_name):
-                resolved_name = None
-        except Exception:
-            resolved_name = None
-
-    if not resolved_name or not _is_valid_name(resolved_name):
-        resolved_name = _normalize_name(os.path.splitext(file.filename or "")[0])
-    if not resolved_name or not _is_valid_name(resolved_name):
-        resolved_name = "Candidate"
-    stored_path = _save_resume_file(file.filename, content, resolved_name)
-
-    if not email:
-        email = _extract_email(resume_text)
-    if not phone:
-        phone = _extract_phone(resume_text)
-
-    duplicate = await _find_duplicate_candidate(db, resolved_name, email)
-    if duplicate:
+    if candidate is None:
         raise HTTPException(status_code=409, detail="Candidate already exists with same name and email")
 
-    candidate = Candidate(
-        name=resolved_name,
-        email=email,
-        phone=phone,
-        resume_text=resume_text,
-        resume_file_path=stored_path,
-        job_description_id=job_description_id,
-    )
-    db.add(candidate)
-    await db.flush()
-
-    await _build_profile(candidate.id, resume_text, ollama, invalid_resume, db)
-    if job_description_id is not None:
-        db.add(
-            CandidateJobLink(
-                candidate_id=candidate.id,
-                job_description_id=job_description_id,
-                confidence=1.0,
-                linked_by="manual",
-            )
-        )
-    else:
-        await _auto_link_candidate_to_jds(db, candidate.id, resume_text)
-
-    await db.commit()
-    await db.refresh(candidate)
     return candidate.to_dict()
 
 

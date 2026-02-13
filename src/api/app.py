@@ -1,7 +1,9 @@
 """Main FastAPI application."""
 
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+import asyncio
 import json
+import logging
 import os
 
 from fastapi import FastAPI, Request, Response
@@ -9,21 +11,61 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routers import candidates, health, job_descriptions, reports, outlook, interviews
+from src.api.routers import candidates, health, job_descriptions, reports, outlook, interviews, gmail
 from src.config.settings import get_settings
-from src.database.connection import init_db
+from src.database.connection import async_session_maker, init_db
+from src.services.gmail_activity_log import GmailActivityLog
+from src.services.gmail_sync_service import GmailSyncService
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+async def _gmail_scheduler_loop() -> None:
+    """Run Gmail sync on configured interval."""
+    interval_minutes = max(settings.gmail_sync_interval_minutes, 1)
+    interval_seconds = interval_minutes * 60
+
+    GmailActivityLog.add(
+        level="info",
+        action="scheduler_started",
+        message=f"Gmail scheduler started (every {interval_minutes} minute(s)).",
+        details={"interval_minutes": interval_minutes},
+    )
+
+    while True:
+        try:
+            async with async_session_maker() as session:
+                await GmailSyncService().sync(session, trigger="scheduler")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.exception("Scheduled Gmail sync failed")
+            GmailActivityLog.add(
+                level="error",
+                action="scheduler_error",
+                message=f"Scheduled Gmail sync failed: {exc}",
+            )
+
+        await asyncio.sleep(interval_seconds)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
-    # Startup
     await init_db()
-    yield
-    # Shutdown
-    pass
+
+    scheduler_task: asyncio.Task | None = None
+    if settings.gmail_enabled:
+        scheduler_task = asyncio.create_task(_gmail_scheduler_loop())
+
+    try:
+        yield
+    finally:
+        if scheduler_task:
+            scheduler_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await scheduler_task
 
 
 app = FastAPI(
@@ -49,6 +91,7 @@ app.include_router(job_descriptions.router, prefix="/api")
 app.include_router(candidates.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(outlook.router, prefix="/api")
+app.include_router(gmail.router, prefix="/api")
 app.include_router(interviews.router, prefix="/api")
 
 
@@ -63,7 +106,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Mount static files
 # Use current working directory to find static folder
-import sys
 current_dir = os.path.dirname(os.path.abspath(__file__))
 # Go up 3 levels to reach project root
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
@@ -112,6 +154,7 @@ async def api_info():
             "candidates": "/candidates",
             "reports": "/reports",
             "outlook": "/outlook",
+            "gmail": "/gmail",
             "interviews": "/interviews",
         },
     }

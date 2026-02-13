@@ -11,6 +11,7 @@ An autonomous AI agent that automates and improves hiring decisions using local 
 - **Interview Strategy**: Generate technical, system design, and behavioral questions
 - **Hiring Recommendations**: Automated hire/reject/hold decisions with explanations
 - **Outlook Ingestion**: Fetch unread Outlook resumes and auto-classify candidates
+- **Gmail Ingestion**: Fetch unread Gmail resumes from a sender, auto-add candidates, and auto-analyze matched profiles
 
 ## Architecture
 
@@ -97,6 +98,19 @@ OUTLOOK_MAX_MESSAGES=25
 OUTLOOK_ATTACHMENT_DIR=data/outlook_resumes
 OUTLOOK_ALLOWED_EXTENSIONS_CSV=.pdf,.doc,.docx
 OUTLOOK_DEVICE_SCOPES_CSV=https://graph.microsoft.com/Mail.ReadWrite
+
+# Gmail IMAP
+GMAIL_ENABLED=false
+GMAIL_IMAP_HOST=imap.gmail.com
+GMAIL_IMAP_PORT=993
+GMAIL_IMAP_USER=
+GMAIL_IMAP_PASSWORD=
+GMAIL_IMAP_FOLDER=INBOX
+GMAIL_IMAP_USE_SSL=true
+GMAIL_SENDER_FILTER=tanvir.k@idsil.com
+GMAIL_MAX_MESSAGES=50
+GMAIL_SYNC_INTERVAL_MINUTES=60
+GMAIL_ALLOWED_EXTENSIONS_CSV=.pdf,.doc,.docx,.txt
 ```
 
 ## Running
@@ -145,6 +159,13 @@ API will be available at `http://localhost:8000`
 | GET | `/outlook/candidates` | List Outlook candidates |
 | POST | `/outlook/attach` | Attach Outlook candidates to a job description |
 | GET | `/outlook/candidates/{id}/resume` | Download Outlook resume |
+
+### Gmail
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/gmail/ingest` | Ingest unread Gmail resumes, auto-analyze JD matches |
+| GET | `/gmail/logs` | List Gmail sync/analysis activity logs |
 
 ### Health
 
