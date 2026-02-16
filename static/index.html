@@ -32,17 +32,119 @@
         }
 
         .navbar {
-            background: rgba(255, 255, 255, 0.9) !important;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.96), rgba(240, 253, 250, 0.96)) !important;
             backdrop-filter: blur(12px);
-            box-shadow: 0 10px 30px rgba(15, 118, 110, 0.08);
+            box-shadow: 0 14px 32px rgba(15, 118, 110, 0.12);
             border-bottom: 1px solid rgba(15, 118, 110, 0.1);
         }
 
         .navbar-brand {
-            font-weight: 700;
-            letter-spacing: 0.02em;
-            color: var(--secondary-color) !important;
+            display: flex;
+            align-items: center;
+            gap: 0.9rem;
+            text-decoration: none;
+            color: inherit !important;
+            padding: 0.25rem 0.1rem;
         }
+
+        .brand-logo-shell {
+            width: 72px;
+            height: 72px;
+            border-radius: 16px;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 24px rgba(12, 74, 110, 0.18);
+            border: 1px solid rgba(12, 74, 110, 0.1);
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .brand-logo {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .brand-logo-fallback {
+            display: none;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.65rem;
+        }
+
+        .brand-copy {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            line-height: 1.15;
+        }
+
+        .brand-title {
+            display: flex;
+            align-items: flex-end;
+            gap: 0.45rem;
+            color: var(--secondary-color);
+        }
+
+        .brand-ai-lockup {
+            position: relative;
+            display: inline-block;
+            font-weight: 900;
+            font-size: 1.55rem;
+            line-height: 0.9;
+            letter-spacing: 0.01em;
+            color: #0b0f19;
+            padding-top: 0.55rem;
+        }
+
+        .brand-ai-stars {
+            position: absolute;
+            top: -0.22rem;
+            left: 1.42rem;
+            width: 1.8rem;
+            height: 0.75rem;
+            pointer-events: none;
+        }
+
+        .brand-ai-star {
+            position: absolute;
+            color: #0b0f19;
+            line-height: 1;
+            font-weight: 900;
+        }
+
+        .brand-ai-star.main {
+            font-size: 0.88rem;
+            left: 0.58rem;
+            top: 0.18rem;
+        }
+
+        .brand-ai-star.top {
+            font-size: 0.56rem;
+            left: 1.08rem;
+            top: -0.15rem;
+        }
+
+        .brand-ai-star.right {
+            font-size: 0.62rem;
+            left: 1.46rem;
+            top: 0.2rem;
+        }
+
+        .brand-name-tail {
+            font-weight: 800;
+            font-size: 1.18rem;
+            letter-spacing: 0.015em;
+            color: var(--secondary-color);
+            transform: translateY(-0.03rem);
+        }
+
 
         .main-container {
             padding: 2.5rem 1.5rem 3.5rem;
@@ -659,6 +761,33 @@
             .step-label {
                 font-size: 0.75rem;
             }
+
+            .brand-logo-shell {
+                width: 56px;
+                height: 56px;
+                border-radius: 12px;
+            }
+
+            .brand-title {
+                gap: 0.28rem;
+            }
+
+            .brand-ai-lockup {
+                font-size: 1.25rem;
+                padding-top: 0.44rem;
+            }
+
+            .brand-ai-stars {
+                left: 1.14rem;
+                top: -0.18rem;
+                transform: scale(0.9);
+                transform-origin: top left;
+            }
+
+            .brand-name-tail {
+                font-size: 1rem;
+            }
+
         }
     </style>
 </head>
@@ -667,7 +796,28 @@
     <nav class="navbar navbar-expand-lg navbar-light sticky-top">
         <div class="container-fluid">
             <a class="navbar-brand" href="#">
-                <i class="bi bi-robot me-2"></i>AI Smart Hiring Agent
+                <span class="brand-logo-shell">
+                    <img
+                        src="/static/logo.png"
+                        alt="IDS Logo"
+                        class="brand-logo"
+                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                    >
+                    <span class="brand-logo-fallback"><i class="bi bi-people-fill"></i></span>
+                </span>
+                <span class="brand-copy">
+                    <span class="brand-title">
+                        <span class="brand-ai-lockup">
+                            <span class="brand-ai-stars" aria-hidden="true">
+                                <span class="brand-ai-star main">&#10022;</span>
+                                <span class="brand-ai-star top">&#10022;</span>
+                                <span class="brand-ai-star right">&#10022;</span>
+                            </span>
+                            AI
+                        </span>
+                        <span class="brand-name-tail">Smart Hiring Agent</span>
+                    </span>
+                </span>
             </a>
         </div>
     </nav>
