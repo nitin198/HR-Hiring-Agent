@@ -315,6 +315,40 @@
             border-left-color: var(--danger-color);
         }
 
+        .jd-description-root {
+            background: var(--surface-100);
+            border: 1px solid var(--surface-300);
+            border-radius: 12px;
+            padding: 0.4rem 0.95rem;
+        }
+
+        .jd-description-section {
+            padding: 0.85rem 0;
+            border-top: 1px solid var(--surface-300);
+        }
+
+        .jd-description-section:first-child {
+            border-top: none;
+        }
+
+        .jd-description-paragraph {
+            margin: 0;
+            color: var(--ink-700);
+            line-height: 1.65;
+            white-space: normal;
+        }
+
+        .jd-description-list {
+            margin: 0;
+            padding-left: 1.35rem;
+            color: var(--ink-700);
+            line-height: 1.6;
+        }
+
+        .jd-description-list li + li {
+            margin-top: 0.35rem;
+        }
+
         .toast-container {
             position: fixed;
             top: 1rem;

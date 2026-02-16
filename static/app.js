@@ -1686,6 +1686,97 @@ async function saveJobDescription() {
     }
 }
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function renderJdDescription(description) {
+    const text = String(description ?? '').replace(/\r\n/g, '\n');
+    const lines = text.split('\n');
+    const blocks = [];
+
+    let paragraphLines = [];
+    let listType = null;
+    let listItems = [];
+
+    const flushParagraph = () => {
+        if (paragraphLines.length === 0) return;
+        blocks.push({
+            type: 'paragraph',
+            text: paragraphLines.join('\n')
+        });
+        paragraphLines = [];
+    };
+
+    const flushList = () => {
+        if (!listType || listItems.length === 0) return;
+        blocks.push({
+            type: listType,
+            items: [...listItems]
+        });
+        listType = null;
+        listItems = [];
+    };
+
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+
+        if (!line) {
+            flushParagraph();
+            flushList();
+            continue;
+        }
+
+        const unorderedMatch = line.match(/^[-*\u2022]\s+(.+)$/);
+        const orderedMatch = line.match(/^(\d+)\.\s+(.+)$/);
+
+        if (unorderedMatch) {
+            flushParagraph();
+            if (listType && listType !== 'ul') {
+                flushList();
+            }
+            listType = 'ul';
+            listItems.push(unorderedMatch[1]);
+            continue;
+        }
+
+        if (orderedMatch) {
+            flushParagraph();
+            if (listType && listType !== 'ol') {
+                flushList();
+            }
+            listType = 'ol';
+            listItems.push(orderedMatch[2]);
+            continue;
+        }
+
+        flushList();
+        paragraphLines.push(rawLine);
+    }
+
+    flushParagraph();
+    flushList();
+
+    if (blocks.length === 0) {
+        return '<p class="text-muted mb-0">No description provided</p>';
+    }
+
+    return blocks.map(block => {
+        if (block.type === 'paragraph') {
+            const paragraphText = escapeHtml(block.text).replace(/\n/g, '<br>');
+            return `<div class="jd-description-section"><p class="jd-description-paragraph">${paragraphText}</p></div>`;
+        }
+
+        const items = block.items.map(item => `<li>${escapeHtml(item)}</li>`).join('');
+        return `<div class="jd-description-section"><${block.type} class="jd-description-list">${items}</${block.type}></div>`;
+    }).join('');
+}
+
 async function viewJobDescription(jdId) {
     try {
         const jd = await apiCall(`/api/job-descriptions/${jdId}`);
@@ -1694,14 +1785,16 @@ async function viewJobDescription(jdId) {
         
         let html = `
             <div class="mb-3">
-                <h6>Description</h6>
-                <p class="text-muted">${jd.description}</p>
+                <h6 class="mb-2">Description</h6>
+                <div class="jd-description-root">
+                    ${renderJdDescription(jd.description)}
+                </div>
             </div>
             <div class="mb-3">
                 <h6>Required Skills</h6>
                 <div>
                     ${jd.required_skills && jd.required_skills.length > 0 ?
-                        jd.required_skills.map(skill => `<span class="badge bg-primary me-1">${skill}</span>`).join('') :
+                        jd.required_skills.map(skill => `<span class="badge bg-primary me-1">${escapeHtml(skill)}</span>`).join('') :
                         '<span class="text-muted">No skills specified</span>'
                     }
                 </div>
@@ -1713,7 +1806,7 @@ async function viewJobDescription(jdId) {
                 </div>
                 <div class="col-md-6">
                     <h6>Domain</h6>
-                    <p class="text-muted">${jd.domain || 'Not specified'}</p>
+                    <p class="text-muted">${escapeHtml(jd.domain || 'Not specified')}</p>
                 </div>
             </div>
             <div class="row">
