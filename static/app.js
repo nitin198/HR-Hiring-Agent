@@ -1,4 +1,4 @@
-// API Base URL
+﻿// API Base URL
 const API_BASE_URL = ((window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || window.location.origin).replace(/\/$/, "");
 
 // State Management
@@ -415,7 +415,7 @@ async function loadCandidatesForSelectedJd() {
                 <div class="list-group-item d-flex justify-content-between align-items-center">
                     <div>
                         <h6 class="mb-1">${formatCandidateName(candidate.name)} <span class="text-muted small">(ID: ${candidate.id})</span></h6>
-                        <small class="text-muted">${candidate.email || 'No email'} • ${candidate.phone || 'No phone'}</small>
+                        <small class="text-muted">${candidate.email || 'No email'} â€¢ ${candidate.phone || 'No phone'}</small>
                     </div>
                     <input type="checkbox" class="form-check-input jd-candidate-checkbox" data-candidate-id="${candidate.id}">
                 </div>
@@ -476,7 +476,7 @@ loadCandidatesForSelectedJd = async () => {
                 <div class="list-group-item d-flex justify-content-between align-items-center">
                     <div>
                         <h6 class="mb-1">${formatCandidateName(candidate.name)} <span class="text-muted small">(ID: ${candidate.id})</span></h6>
-                        <small class="text-muted">${headline} • ${exp}</small>
+                        <small class="text-muted">${headline} â€¢ ${exp}</small>
                         <div class="mt-1">${linkBadges}</div>
                     </div>
                     <input type="checkbox" class="form-check-input jd-candidate-checkbox" data-candidate-id="${candidate.id}">
@@ -914,7 +914,7 @@ function displayDetailedResults() {
                     <div class="interview-strategy-card ${decision === 'strong_hire' || decision === 'borderline' ? 'pass' : 'fail'}">
                         <h6 class="mb-3">
                             <i class="bi bi-${decision === 'strong_hire' || decision === 'borderline' ? 'check-circle' : 'x-circle'} me-2"></i>
-                            ${decision === 'strong_hire' || decision === 'borderline' ? '✅ PASS' : '❌ FAIL'}: Interview Strategy for ${candidate.name || 'Unknown'}
+                            ${decision === 'strong_hire' || decision === 'borderline' ? 'âœ… PASS' : 'âŒ FAIL'}: Interview Strategy for ${candidate.name || 'Unknown'}
                         </h6>
                         <div class="row mb-3">
                             <div class="col-md-6">
@@ -1031,6 +1031,13 @@ function getRiskLevelClass(riskLevel) {
         default:
             return 'secondary';
     }
+}
+
+function formatDecisionLabel(decision) {
+    if (!decision) return 'Pending';
+    const normalized = String(decision).trim().toLowerCase();
+    if (!normalized) return 'Pending';
+    return normalized.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 // Report Tab Navigation
@@ -1186,12 +1193,12 @@ async function syncGmailCandidates() {
         await loadGmailLogs();
 
         const errorCount = result.errors ? result.errors.length : 0;
-        const message = `Gmail sync complete: ${result.created_candidates} imported, ${result.analyzed_candidates || 0} analyzed, ${result.no_jd_match_candidates || 0} with no JD match.`;
+        const message = `Sync complete: ${result.created_candidates} imported, ${result.analyzed_candidates || 0} analyzed, ${result.no_jd_match_candidates || 0} with no JD match.`;
         showToast(errorCount > 0 ? `${message} (${errorCount} errors)` : message, errorCount > 0 ? 'warning' : 'success');
 
         loadCandidatesManagement();
     } catch (error) {
-        showToast('Failed to sync Gmail: ' + error.message, 'danger');
+        showToast('Failed to sync inbox: ' + error.message, 'danger');
     }
 }
 
@@ -1203,7 +1210,7 @@ async function loadGmailLogs() {
     } catch (error) {
         const container = document.getElementById('gmail-sync-logs');
         if (container) {
-            container.innerHTML = `<div class="alert alert-danger">Failed to load Gmail logs: ${error.message}</div>`;
+            container.innerHTML = `<div class="alert alert-danger">Failed to load sync logs: ${error.message}</div>`;
         }
     }
 }
@@ -1263,7 +1270,7 @@ function renderGmailLogs(logs) {
     }
 
     if (!logs || logs.length === 0) {
-        container.innerHTML = '<p class="text-muted">No Gmail sync logs yet.</p>';
+        container.innerHTML = '<p class="text-muted">No sync logs yet.</p>';
         return;
     }
 
@@ -1320,7 +1327,7 @@ function renderGmailCandidatesList(candidates) {
     }
 
     if (!candidates || candidates.length === 0) {
-        container.innerHTML = '<p class="text-muted">No Gmail candidates imported in this session.</p>';
+        container.innerHTML = '<p class="text-muted">No candidates imported in this session.</p>';
         return;
     }
 
@@ -2033,11 +2040,14 @@ async function loadCandidatesManagement() {
             container.innerHTML = '<p class="text-muted">No candidates found.</p>';
             return;
         }
+
         let html = '<div class="list-group">';
         candidates.forEach(item => {
             const candidate = item.candidate || {};
             const profile = item.profile || {};
             const jobLinks = item.job_links || [];
+            const latestAnalysis = item.latest_analysis || null;
+
             const invalidBadge = profile.invalid_resume
                 ? '<span class="badge bg-danger ms-2">Invalid Resume</span>'
                 : '';
@@ -2047,31 +2057,66 @@ async function loadCandidatesManagement() {
                 ? jobLinks.map(link => `<span class="badge bg-light text-dark me-1">${link.title}</span>`).join('')
                 : '<span class="text-muted">No JD linked</span>';
             const resumeLink = candidate.resume_file_path
-                ? `<a class="btn btn-sm btn-outline-primary" href="${API_BASE_URL}/api/candidates/${candidate.id}/resume" target="_blank">Resume</a>`
+                ? `<a class="btn btn-sm btn-outline-primary cm-action-btn" href="${API_BASE_URL}/api/candidates/${candidate.id}/resume" target="_blank" title="Download Resume" aria-label="Download Resume"><i class="bi bi-file-earmark-arrow-down"></i></a>`
                 : '';
-            const reviewLink = `<a class="btn btn-sm btn-outline-success" href="${API_BASE_URL}/static/interview_review.html?candidate_id=${candidate.id}" target="_blank">Review</a>`;
+
+            const analysisScore = typeof latestAnalysis?.final_score === 'number'
+                ? `${latestAnalysis.final_score.toFixed(2)}/100`
+                : 'N/A';
+            const analysisDecision = latestAnalysis?.decision || 'pending';
+            const analysisDecisionClass = getBadgeClass(analysisDecision);
+            const analysisDecisionLabel = formatDecisionLabel(analysisDecision);
+            const analysisJd = latestAnalysis?.job_description_title
+                || (latestAnalysis?.job_description_id ? `JD ${latestAnalysis.job_description_id}` : '');
+            const analysisTimestamp = latestAnalysis?.analysis_timestamp
+                ? new Date(latestAnalysis.analysis_timestamp).toLocaleString()
+                : '';
+            const analysisLink = latestAnalysis?.id
+                ? `<a class="btn btn-sm btn-outline-info cm-action-btn" href="${API_BASE_URL}/static/analysis_run.html?run_id=${latestAnalysis.id}" target="_blank" title="Open Latest Analysis" aria-label="Open Latest Analysis"><i class="bi bi-graph-up-arrow"></i></a>`
+                : '';
+            const latestAnalysisHtml = latestAnalysis
+                ? `
+                    <div class="cm-analysis-summary mt-2">
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                            <span class="small text-muted">Latest Analysis:</span>
+                            <span class="badge ${analysisDecisionClass}">${analysisDecisionLabel}</span>
+                            <span class="small"><strong>Score:</strong> ${analysisScore}</span>
+                        </div>
+                        <div class="small text-muted">
+                            ${escapeHtml(analysisJd)}${analysisTimestamp ? ` | ${analysisTimestamp}` : ''}
+                        </div>
+                    </div>
+                `
+                : `
+                    <div class="cm-analysis-summary mt-2">
+                        <div class="small text-muted">Latest Analysis: Not available</div>
+                    </div>
+                `;
+
             html += `
                 <div class="list-group-item">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <div class="d-flex align-items-center gap-2">
                                 <input class="form-check-input cm-select" type="checkbox" data-candidate-id="${candidate.id}">
-                            <h6 class="mb-1">${formatCandidateName(candidate.name)} <span class="text-muted small">(ID: ${candidate.id})</span>${invalidBadge}</h6>
+                                <h6 class="mb-1">${formatCandidateName(candidate.name)} <span class="text-muted small">(ID: ${candidate.id})</span>${invalidBadge}</h6>
                             </div>
-                            <small class="text-muted">${headline} • ${exp}</small>
+                            <small class="text-muted">${headline} | ${exp}</small>
                             <div class="mt-1">${linkBadges}</div>
+                            ${latestAnalysisHtml}
                         </div>
-                        <div class="d-flex gap-2">
+                        <div class="cm-action-buttons d-flex align-items-center gap-1 flex-wrap justify-content-end">
                             ${resumeLink}
-                            ${reviewLink}
-                            <button class="btn btn-sm btn-outline-secondary" onclick="viewCandidateDetail(${candidate.id})">View</button>
-                            <button class="btn btn-sm btn-outline-primary" onclick="openEditCandidate(${candidate.id})">Edit</button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteCandidate(${candidate.id})">Delete</button>
+                            ${analysisLink}
+                            <button class="btn btn-sm btn-outline-secondary cm-action-btn" onclick="viewCandidateDetail(${candidate.id})" title="View Candidate" aria-label="View Candidate"><i class="bi bi-eye"></i></button>
+                            <button class="btn btn-sm btn-outline-primary cm-action-btn" onclick="openEditCandidate(${candidate.id})" title="Edit Candidate" aria-label="Edit Candidate"><i class="bi bi-pencil-square"></i></button>
+                            <button class="btn btn-sm btn-danger cm-action-btn" onclick="deleteCandidate(${candidate.id})" title="Delete Candidate" aria-label="Delete Candidate"><i class="bi bi-trash"></i></button>
                         </div>
                     </div>
                 </div>
             `;
         });
+
         html += '</div>';
         container.innerHTML = html;
         wireCandidateSelection();
@@ -2114,7 +2159,7 @@ async function viewCandidateDetail(candidateId) {
                 return `
                     <div class="border rounded p-2 mb-2">
                         <div class="small text-muted">
-                            JD: ${run.job_description_title || run.job_description_id} • Score: ${run.final_score?.toFixed?.(2) ?? 'N/A'} • ${run.analysis_timestamp || ''}
+                            JD: ${run.job_description_title || run.job_description_id} | Score: ${run.final_score?.toFixed?.(2) ?? 'N/A'} | ${run.analysis_timestamp || ''}
                         </div>
                         <div class="d-flex justify-content-between align-items-center">
                             <div><strong>Decision:</strong> ${run.decision || 'N/A'}</div>
@@ -2497,3 +2542,4 @@ async function loadInterviewSummaries() {
         container.innerHTML = `<div class="alert alert-danger">Failed to load interview summaries: ${error.message}</div>`;
     }
 }
+

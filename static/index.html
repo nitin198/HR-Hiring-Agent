@@ -364,6 +364,28 @@
             font-weight: 600;
         }
 
+        .cm-analysis-summary {
+            background: var(--surface-100);
+            border: 1px solid var(--surface-300);
+            border-radius: 10px;
+            padding: 0.5rem 0.65rem;
+            max-width: 620px;
+        }
+
+        .cm-action-buttons {
+            min-width: 150px;
+        }
+
+        .cm-action-btn {
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            border-radius: 8px;
+        }
+
         .toast-container {
             position: fixed;
             top: 1rem;
@@ -667,7 +689,7 @@
             </li>
             <li class="nav-item">
                 <a class="nav-link" href="#" onclick="showMainTab('gmail-candidates')">
-                    <i class="bi bi-envelope-open me-1"></i>New Candidates (Gmail)
+                    <i class="bi bi-envelope-open me-1"></i>New Candidates (Email)
                 </a>
             </li>
             <li class="nav-item">
@@ -1056,17 +1078,17 @@
             </div>
         </div>
 
-        <!-- Gmail Candidates Tab -->
+        <!-- Email Candidates Tab -->
         <div id="gmail-candidates-tab" class="tab-content" style="display: none;">
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-envelope-open me-2"></i>New Candidates (Gmail)</h5>
+                    <h5 class="mb-0"><i class="bi bi-envelope-open me-2"></i>New Candidates (Email)</h5>
                     <div class="d-flex gap-2">
                         <button class="btn btn-outline-light btn-sm" type="button" onclick="loadGmailLogs()">
                             <i class="bi bi-clock-history me-1"></i>Refresh Logs
                         </button>
                         <button class="btn btn-primary btn-sm" type="button" onclick="syncGmailCandidates()">
-                            <i class="bi bi-arrow-repeat me-1"></i>Sync Gmail
+                            <i class="bi bi-arrow-repeat me-1"></i>Sync Inbox
                         </button>
                     </div>
                 </div>
@@ -1081,9 +1103,9 @@
                         </div>
                     </div>
                     <div>
-                        <h6 class="mb-2">Gmail Sync Activity Log</h6>
+                        <h6 class="mb-2">Sync Activity Log</h6>
                         <div id="gmail-sync-logs">
-                            <p class="text-muted">No Gmail sync logs yet.</p>
+                            <p class="text-muted">No sync logs yet.</p>
                         </div>
                     </div>
                 </div>

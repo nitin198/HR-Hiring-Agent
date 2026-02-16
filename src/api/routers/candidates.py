@@ -561,11 +561,31 @@ async def list_candidates_summary(
             }
         )
 
+    latest_analysis_map: dict[int, dict] = {}
+    if candidate_ids:
+        runs_result = await db.execute(
+            select(CandidateAnalysisRun, JobDescription)
+            .join(JobDescription, CandidateAnalysisRun.job_description_id == JobDescription.id)
+            .where(CandidateAnalysisRun.candidate_id.in_(candidate_ids))
+            .order_by(
+                CandidateAnalysisRun.candidate_id,
+                CandidateAnalysisRun.analysis_timestamp.desc(),
+                CandidateAnalysisRun.id.desc(),
+            )
+        )
+        for run, jd in runs_result.all():
+            if run.candidate_id in latest_analysis_map:
+                continue
+            payload = run.to_dict()
+            payload["job_description_title"] = jd.title
+            latest_analysis_map[run.candidate_id] = payload
+
     return [
         {
             "candidate": candidate.to_dict(),
             "profile": profile.to_dict() if profile else None,
             "job_links": link_map.get(candidate.id, []),
+            "latest_analysis": latest_analysis_map.get(candidate.id),
         }
         for candidate, profile in rows
     ]
