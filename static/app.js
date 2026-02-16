@@ -1273,7 +1273,7 @@ function renderGmailLogs(logs) {
         error: 'bg-danger-subtle text-danger-emphasis',
     };
 
-    const maxVisibleLogs = 5;
+    const maxVisibleLogs = 25;
     const sortedLogs = [...logs].sort((a, b) => {
         const aTime = new Date(a?.timestamp || 0).getTime();
         const bTime = new Date(b?.timestamp || 0).getTime();
