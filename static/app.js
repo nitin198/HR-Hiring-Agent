@@ -1197,7 +1197,7 @@ async function syncGmailCandidates() {
 
 async function loadGmailLogs() {
     try {
-        const response = await apiCall('/api/gmail/logs?limit=200');
+        const response = await apiCall('/api/gmail/logs?limit=50');
         gmailSyncLogs = response.logs || [];
         renderGmailLogs(gmailSyncLogs);
     } catch (error) {
@@ -1273,8 +1273,20 @@ function renderGmailLogs(logs) {
         error: 'bg-danger-subtle text-danger-emphasis',
     };
 
-    let html = '<div class="list-group">';
-    logs.forEach(entry => {
+    const maxVisibleLogs = 5;
+    const sortedLogs = [...logs].sort((a, b) => {
+        const aTime = new Date(a?.timestamp || 0).getTime();
+        const bTime = new Date(b?.timestamp || 0).getTime();
+        return bTime - aTime;
+    });
+    const visibleLogs = sortedLogs.slice(0, maxVisibleLogs);
+
+    let html = '';
+    if (sortedLogs.length > maxVisibleLogs) {
+        html += `<p class="text-muted small mb-2">Showing latest ${maxVisibleLogs} of ${sortedLogs.length} log entries.</p>`;
+    }
+    html += '<div class="list-group">';
+    visibleLogs.forEach(entry => {
         const badgeClass = levelClass[entry.level] || 'bg-light text-dark';
         const ts = formatIstDateTime(entry.timestamp);
         const candidateId = entry.details && entry.details.candidate_id ? Number(entry.details.candidate_id) : null;
