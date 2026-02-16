@@ -349,6 +349,21 @@
             margin-top: 0.35rem;
         }
 
+        .jd-filter-bar {
+            background: var(--surface-100);
+            border: 1px solid var(--surface-300);
+            border-radius: 12px;
+            padding: 0.9rem 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .jd-filter-bar .form-label {
+            font-size: 0.8rem;
+            margin-bottom: 0.25rem;
+            color: var(--ink-700);
+            font-weight: 600;
+        }
+
         .toast-container {
             position: fixed;
             top: 1rem;
@@ -989,6 +1004,34 @@
                     </button>
                 </div>
                 <div class="card-body">
+                    <div class="jd-filter-bar">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-3">
+                                <label class="form-label">Title</label>
+                                <input type="text" class="form-control form-control-sm" id="jd-filter-title" placeholder="Search by title">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Domain</label>
+                                <input type="text" class="form-control form-control-sm" id="jd-filter-domain" placeholder="e.g. Data, QA">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Skill</label>
+                                <input type="text" class="form-control form-control-sm" id="jd-filter-skill" placeholder="Python, SQL">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Min Exp (Years)</label>
+                                <input type="number" class="form-control form-control-sm" id="jd-filter-min-exp" min="0" step="0.5">
+                            </div>
+                            <div class="col-md-2 d-flex gap-2">
+                                <button class="btn btn-outline-primary btn-sm w-100" type="button" id="jd-filter-apply">
+                                    <i class="bi bi-search me-1"></i>Apply
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm w-100" type="button" id="jd-filter-reset">
+                                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                     <div id="jd-list-container">
                         <p class="text-muted">Loading job descriptions...</p>
                     </div>
@@ -1245,6 +1288,9 @@
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-primary" id="view-jd-edit-btn">
+                        <i class="bi bi-pencil me-1"></i>Edit
+                    </button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>

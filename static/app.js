@@ -1515,10 +1515,46 @@ if (addOutlookButton) {
 }
 
 // Job Descriptions Management
+function getJobDescriptionFilters() {
+    return {
+        title: (document.getElementById('jd-filter-title')?.value || '').trim().toLowerCase(),
+        domain: (document.getElementById('jd-filter-domain')?.value || '').trim().toLowerCase(),
+        skill: (document.getElementById('jd-filter-skill')?.value || '').trim().toLowerCase(),
+        minExperience: parseFloat(document.getElementById('jd-filter-min-exp')?.value || '')
+    };
+}
+
+function matchesJobDescriptionFilters(jd, filters) {
+    const titleMatch = !filters.title || (jd.title || '').toLowerCase().includes(filters.title);
+    const domainMatch = !filters.domain || (jd.domain || '').toLowerCase().includes(filters.domain);
+    const skillMatch = !filters.skill || (jd.required_skills || []).some(skill =>
+        String(skill || '').toLowerCase().includes(filters.skill)
+    );
+    const expMatch = Number.isNaN(filters.minExperience) || (Number(jd.min_experience_years) || 0) >= filters.minExperience;
+
+    return titleMatch && domainMatch && skillMatch && expMatch;
+}
+
+function resetJobDescriptionFilters() {
+    const titleInput = document.getElementById('jd-filter-title');
+    const domainInput = document.getElementById('jd-filter-domain');
+    const skillInput = document.getElementById('jd-filter-skill');
+    const expInput = document.getElementById('jd-filter-min-exp');
+
+    if (titleInput) titleInput.value = '';
+    if (domainInput) domainInput.value = '';
+    if (skillInput) skillInput.value = '';
+    if (expInput) expInput.value = '';
+
+    loadJobDescriptionsList();
+}
+
 async function loadJobDescriptionsList() {
     try {
         const jds = await apiCall('/api/job-descriptions');
         const container = document.getElementById('jd-list-container');
+        const filters = getJobDescriptionFilters();
+        const filteredJds = jds.filter(jd => matchesJobDescriptionFilters(jd, filters));
         
         if (jds.length === 0) {
             container.innerHTML = `
@@ -1532,15 +1568,33 @@ async function loadJobDescriptionsList() {
             `;
             return;
         }
+
+        if (filteredJds.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-4">
+                    <i class="bi bi-funnel text-muted" style="font-size: 2.2rem;"></i>
+                    <p class="text-muted mt-3 mb-2">No job descriptions match the current filters</p>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="resetJobDescriptionFilters()">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Clear Filters
+                    </button>
+                </div>
+            `;
+            return;
+        }
         
         let html = '<div class="row">';
-        jds.forEach(jd => {
+        filteredJds.forEach(jd => {
+            const descriptionPreview = String(jd.description || '');
+            const shortDescription = descriptionPreview.length > 150
+                ? `${descriptionPreview.substring(0, 150)}...`
+                : descriptionPreview;
+
             html += `
                 <div class="col-md-6 mb-3">
                     <div class="card">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-start mb-2">
-                                <h6 class="mb-1">${jd.title}</h6>
+                                <h6 class="mb-1">${escapeHtml(jd.title || 'Untitled')}</h6>
                                 <div class="dropdown">
                                     <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                                         <i class="bi bi-three-dots"></i>
@@ -1567,17 +1621,17 @@ async function loadJobDescriptionsList() {
                                     </ul>
                                 </div>
                             </div>
-                            <p class="text-muted mb-2" style="font-size: 0.875rem;">${jd.description.substring(0, 150)}...</p>
+                            <p class="text-muted mb-2" style="font-size: 0.875rem;">${escapeHtml(shortDescription || 'No description')}</p>
                             <div class="mb-2">
                                 ${jd.required_skills && jd.required_skills.length > 0 ?
-                                    jd.required_skills.map(skill => `<span class="badge bg-light text-dark me-1">${skill}</span>`).join('') :
+                                    jd.required_skills.map(skill => `<span class="badge bg-light text-dark me-1">${escapeHtml(skill)}</span>`).join('') :
                                     '<span class="text-muted">No skills specified</span>'
                                 }
                             </div>
                             <div class="d-flex justify-content-between align-items-center">
                                 <small class="text-muted">
                                     <i class="bi bi-clock me-1"></i>${jd.min_experience_years}+ years
-                                    ${jd.domain ? `<span class="ms-2"><i class="bi bi-tag me-1"></i>${jd.domain}</span>` : ''}
+                                    ${jd.domain ? `<span class="ms-2"><i class="bi bi-tag me-1"></i>${escapeHtml(jd.domain)}</span>` : ''}
                                 </small>
                                 <small class="text-muted">
                                     ${jd.created_at ? new Date(jd.created_at).toLocaleDateString() : ''}
@@ -1824,6 +1878,18 @@ async function viewJobDescription(jdId) {
         `;
         
         document.getElementById('view-jd-content').innerHTML = html;
+
+        const editButton = document.getElementById('view-jd-edit-btn');
+        if (editButton) {
+            editButton.onclick = () => {
+                const viewModalElement = document.getElementById('viewJdModal');
+                const viewModal = bootstrap.Modal.getInstance(viewModalElement);
+                if (viewModal) {
+                    viewModal.hide();
+                }
+                editJobDescription(jd.id);
+            };
+        }
         
         const modal = new bootstrap.Modal(document.getElementById('viewJdModal'));
         modal.show();
@@ -1858,8 +1924,35 @@ async function deleteJobDescription(jdId) {
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     loadJobDescriptions();
+    loadJobDescriptionsList();
     loadOutlookCandidates(true);
     loadCandidateManagementJds();
+
+    const jdFilterApply = document.getElementById('jd-filter-apply');
+    if (jdFilterApply) {
+        jdFilterApply.addEventListener('click', loadJobDescriptionsList);
+    }
+
+    const jdFilterReset = document.getElementById('jd-filter-reset');
+    if (jdFilterReset) {
+        jdFilterReset.addEventListener('click', resetJobDescriptionFilters);
+    }
+
+    const jdFilterInputs = [
+        document.getElementById('jd-filter-title'),
+        document.getElementById('jd-filter-domain'),
+        document.getElementById('jd-filter-skill'),
+        document.getElementById('jd-filter-min-exp'),
+    ];
+    jdFilterInputs.forEach(input => {
+        if (!input) return;
+        input.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                loadJobDescriptionsList();
+            }
+        });
+    });
 });
 
 const refreshJdCandidatesButton = document.getElementById('btn-refresh-jd-candidates');
