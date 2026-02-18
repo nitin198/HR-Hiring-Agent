@@ -753,6 +753,83 @@
             padding: 0.45rem 1rem;
         }
 
+        .cm-save-filter-row {
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px dashed var(--surface-300);
+        }
+
+        .cm-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr);
+            gap: 1rem;
+        }
+
+        .cm-list-panel,
+        .cm-detail-panel {
+            border: 1px solid var(--surface-300);
+            border-radius: 12px;
+            background: var(--surface-100);
+            padding: 0.85rem;
+            min-height: 420px;
+        }
+
+        .cm-candidate-row {
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            transition: background 0.18s ease, transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+            color: var(--ink-900);
+        }
+
+        .cm-candidate-row .text-muted {
+            color: #475569 !important;
+        }
+
+        .cm-candidate-row:hover {
+            background: linear-gradient(135deg, #f0fdfa, #ecfeff);
+            border-color: rgba(15, 118, 110, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .cm-candidate-row.active {
+            border: 1px solid rgba(2, 132, 199, 0.45);
+            background: linear-gradient(135deg, #e0f2fe, #dbeafe);
+            box-shadow: 0 8px 18px rgba(2, 132, 199, 0.14);
+            color: #0b1220;
+        }
+
+        .cm-candidate-row.active h6,
+        .cm-candidate-row.active .small,
+        .cm-candidate-row.active .text-muted {
+            color: #0f172a !important;
+        }
+
+        .cm-candidate-row .badge.bg-light {
+            background: #f8fafc !important;
+            color: #0f172a !important;
+            border: 1px solid #cbd5e1;
+        }
+
+        .cm-selection-banner {
+            border: 1px solid rgba(2, 132, 199, 0.25);
+            background: #ecfeff;
+            border-radius: 10px;
+            padding: 0.55rem 0.75rem;
+            margin-bottom: 0.7rem;
+        }
+
+        .cm-pagination {
+            border-top: 1px solid var(--surface-300);
+            margin-top: 0.85rem;
+            padding-top: 0.85rem;
+        }
+
+        .cm-detail-panel .value {
+            color: var(--ink-700);
+            font-size: 0.9rem;
+        }
+
         @media (max-width: 768px) {
             .main-container {
                 padding: 1.5rem 1rem 2.5rem;
@@ -786,6 +863,10 @@
 
             .brand-name-tail {
                 font-size: 1rem;
+            }
+
+            .cm-grid {
+                grid-template-columns: 1fr;
             }
 
         }
@@ -1298,6 +1379,38 @@
                                 <i class="bi bi-search me-2"></i>Apply Filters
                             </button>
                         </div>
+                        <div class="col-auto">
+                            <button class="btn btn-outline-secondary btn-sm" type="button" id="cm-filter-reset">
+                                <i class="bi bi-arrow-counterclockwise me-2"></i>Reset
+                            </button>
+                        </div>
+                    </div>
+                    <div class="row compact-filter-row align-items-end cm-save-filter-row">
+                        <div class="col-auto">
+                            <label class="form-label">Saved Filters</label>
+                            <select class="form-select form-select-sm" id="cm-saved-filter-select" style="min-width: 220px;">
+                                <option value="">Select saved filter...</option>
+                            </select>
+                        </div>
+                        <div class="col-auto">
+                            <label class="form-label">Preset Name</label>
+                            <input type="text" class="form-control form-control-sm" id="cm-saved-filter-name" placeholder="e.g. Senior Python">
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-outline-success btn-sm" type="button" id="cm-filter-save">
+                                <i class="bi bi-bookmark-plus me-1"></i>Save
+                            </button>
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-outline-primary btn-sm" type="button" id="cm-filter-load">
+                                <i class="bi bi-box-arrow-in-down me-1"></i>Load
+                            </button>
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-outline-danger btn-sm" type="button" id="cm-filter-delete">
+                                <i class="bi bi-trash me-1"></i>Delete
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1325,8 +1438,20 @@
                     </div>
                 </div>
                 <div class="card-body">
-                    <div id="cm-candidate-list">
-                        <p class="text-muted">No candidates loaded.</p>
+                    <div id="cm-selection-banner" class="cm-selection-banner d-none"></div>
+                    <div class="cm-grid">
+                        <div class="cm-list-panel">
+                            <div id="cm-candidate-list">
+                                <p class="text-muted">No candidates loaded.</p>
+                            </div>
+                            <div id="cm-pagination" class="cm-pagination"></div>
+                        </div>
+                        <div class="cm-detail-panel">
+                            <h6 class="mb-2"><i class="bi bi-person-vcard me-2"></i>Candidate Preview</h6>
+                            <div id="cm-detail-content">
+                                <p class="text-muted mb-0">Select a candidate to preview details.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

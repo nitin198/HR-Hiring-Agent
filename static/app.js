@@ -18,6 +18,24 @@ let pipelineTimer = null;
 let pipelineStage = 0;
 let pipelineProgress = [0, 0, 0, 0];
 let pipelineCompleted = false;
+const CM_SAVED_FILTERS_KEY = 'hr_hiring_agent_cm_saved_filters_v1';
+let cmCurrentItems = [];
+let cmCurrentPage = 1;
+let cmPageSize = 20;
+let cmCursorByPage = { 1: null };
+let cmNextCursor = null;
+let cmHasMore = false;
+let cmTotalCount = 0;
+let cmActiveCandidateId = null;
+let cmActiveFiltersSignature = '';
+let cmPrefetchCache = new Map();
+let cmRequestController = null;
+let cmSelectionState = {
+    allMatchingSelected: false,
+    selectedIds: new Set(),
+    excludedIds: new Set(),
+    filters: {},
+};
 
 // Utility Functions
 function showToast(message, type = 'success') {
@@ -1135,6 +1153,7 @@ function showMainTab(tabName) {
 
     if (tabName === 'candidates-management') {
         loadCandidateManagementJds();
+        renderCmSavedFilters();
         loadCandidatesManagement();
     }
 
@@ -2020,33 +2039,61 @@ async function loadCandidatesManagement() {
         return;
     }
     container.innerHTML = '<p class="text-muted">Loading candidates...</p>';
+    const filters = getCmFilters();
+    const filterSignature = getCmFilterSignature(filters);
+    const filtersChanged = filterSignature !== cmActiveFiltersSignature;
+    if (filtersChanged) {
+        cmActiveFiltersSignature = filterSignature;
+        resetCmPagination();
+        resetCmSelection(filters);
+    }
 
-    const name = document.getElementById('cm-filter-name')?.value || '';
-    const skills = document.getElementById('cm-filter-skills')?.value || '';
-    const minExp = document.getElementById('cm-filter-min-exp')?.value || '';
-    const maxExp = document.getElementById('cm-filter-max-exp')?.value || '';
-    const jdId = document.getElementById('cm-filter-jd')?.value || '';
-
-    const params = new URLSearchParams();
-    if (name) params.append('name', name);
-    if (skills) params.append('skills', skills);
-    if (minExp) params.append('min_experience', minExp);
-    if (maxExp) params.append('max_experience', maxExp);
-    if (jdId) params.append('job_description_id', jdId);
+    const cursor = cmCursorByPage[cmCurrentPage] ?? null;
+    const requestParams = buildCmParams(filters, cursor);
+    const requestKey = `${requestParams.toString()}`;
+    const prefetched = cmPrefetchCache.get(requestKey);
 
     try {
-        const candidates = await apiCall(`/api/candidates/summary?${params.toString()}`);
-        if (!candidates || candidates.length === 0) {
+        let payload;
+        if (prefetched) {
+            payload = prefetched;
+            cmPrefetchCache.delete(requestKey);
+        } else {
+            if (cmRequestController) {
+                cmRequestController.abort();
+            }
+            cmRequestController = new AbortController();
+            payload = await apiCall(`/api/candidates/summary/paged?${requestKey}`, { signal: cmRequestController.signal });
+        }
+
+        cmCurrentItems = payload.items || [];
+        cmNextCursor = payload.next_cursor || null;
+        cmHasMore = Boolean(payload.has_more);
+        cmTotalCount = Number(payload.total_count || 0);
+        cmSelectionState.filters = filters;
+        if (cmHasMore && cmNextCursor) {
+            cmCursorByPage[cmCurrentPage + 1] = cmNextCursor;
+            prefetchCmPage(filters, cmNextCursor);
+        } else {
+            delete cmCursorByPage[cmCurrentPage + 1];
+        }
+
+        if (!cmCurrentItems.length) {
             container.innerHTML = '<p class="text-muted">No candidates found.</p>';
+            renderCmPagination();
+            renderCmSelectionBanner();
+            renderCmDetailPane(null);
             return;
         }
 
         let html = '<div class="list-group">';
-        candidates.forEach(item => {
+        cmCurrentItems.forEach(item => {
             const candidate = item.candidate || {};
             const profile = item.profile || {};
             const jobLinks = item.job_links || [];
             const latestAnalysis = item.latest_analysis || null;
+            const checked = isCmCandidateSelected(candidate.id) ? 'checked' : '';
+            const rowClass = cmActiveCandidateId === candidate.id ? 'active' : '';
 
             const invalidBadge = profile.invalid_resume
                 ? '<span class="badge bg-danger ms-2">Invalid Resume</span>'
@@ -2094,11 +2141,11 @@ async function loadCandidatesManagement() {
                 `;
 
             html += `
-                <div class="list-group-item">
+                <div class="list-group-item cm-candidate-row ${rowClass}" data-candidate-id="${candidate.id}">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <div class="d-flex align-items-center gap-2">
-                                <input class="form-check-input cm-select" type="checkbox" data-candidate-id="${candidate.id}">
+                                <input class="form-check-input cm-select" type="checkbox" data-candidate-id="${candidate.id}" ${checked}>
                                 <h6 class="mb-1">${formatCandidateName(candidate.name)} <span class="text-muted small">(ID: ${candidate.id})</span>${invalidBadge}</h6>
                             </div>
                             <small class="text-muted">${headline} | ${exp}</small>
@@ -2120,22 +2167,390 @@ async function loadCandidatesManagement() {
         html += '</div>';
         container.innerHTML = html;
         wireCandidateSelection();
+        wireCandidateRowSelection();
+        renderCmPagination();
+        renderCmSelectionBanner();
+        if (!cmActiveCandidateId) {
+            cmActiveCandidateId = cmCurrentItems[0]?.candidate?.id || null;
+        }
+        const activeItem = cmCurrentItems.find(item => item.candidate?.id === cmActiveCandidateId) || cmCurrentItems[0];
+        renderCmDetailPane(activeItem);
     } catch (error) {
+        if (error.name === 'AbortError') {
+            return;
+        }
         container.innerHTML = `<div class="alert alert-danger">Failed to load candidates: ${error.message}</div>`;
     }
 }
 
 function wireCandidateSelection() {
     const selectAll = document.getElementById('cm-select-all');
-    const checkboxes = document.querySelectorAll('.cm-select');
     if (selectAll) {
-        selectAll.checked = false;
-        selectAll.addEventListener('change', () => {
-            checkboxes.forEach(box => {
-                box.checked = selectAll.checked;
-            });
-        });
+        selectAll.onchange = () => {
+            applyCmSelectAllToPage(selectAll.checked);
+        };
     }
+    document.querySelectorAll('.cm-select').forEach(box => {
+        box.onchange = () => {
+            const candidateId = parseInt(box.dataset.candidateId || '', 10);
+            if (!candidateId) {
+                return;
+            }
+            setCmCandidateSelection(candidateId, box.checked);
+            refreshCmSelectionUi();
+        };
+    });
+    refreshCmSelectionUi();
+}
+
+function wireCandidateRowSelection() {
+    document.querySelectorAll('.cm-candidate-row').forEach(row => {
+        row.onclick = (event) => {
+            if (event.target.closest('button, a, input, label')) {
+                return;
+            }
+            const candidateId = parseInt(row.dataset.candidateId || '', 10);
+            const item = cmCurrentItems.find(entry => (entry.candidate || {}).id === candidateId);
+            if (!item) {
+                return;
+            }
+            cmActiveCandidateId = candidateId;
+            document.querySelectorAll('.cm-candidate-row').forEach(entry => entry.classList.remove('active'));
+            row.classList.add('active');
+            renderCmDetailPane(item);
+        };
+    });
+}
+
+function getCmFilters() {
+    return {
+        name: document.getElementById('cm-filter-name')?.value?.trim() || '',
+        skills: document.getElementById('cm-filter-skills')?.value?.trim() || '',
+        min_experience: document.getElementById('cm-filter-min-exp')?.value || '',
+        max_experience: document.getElementById('cm-filter-max-exp')?.value || '',
+        job_description_id: document.getElementById('cm-filter-jd')?.value || '',
+    };
+}
+
+function applyCmFiltersToForm(filters = {}) {
+    const map = {
+        'cm-filter-name': filters.name || '',
+        'cm-filter-skills': filters.skills || '',
+        'cm-filter-min-exp': filters.min_experience ?? '',
+        'cm-filter-max-exp': filters.max_experience ?? '',
+        'cm-filter-jd': filters.job_description_id ?? '',
+    };
+    Object.entries(map).forEach(([id, value]) => {
+        const input = document.getElementById(id);
+        if (input) {
+            input.value = value;
+        }
+    });
+}
+
+function getCmFilterSignature(filters) {
+    return JSON.stringify(filters);
+}
+
+function buildCmParams(filters, cursor = null) {
+    const params = new URLSearchParams();
+    if (filters.name) params.append('name', filters.name);
+    if (filters.skills) params.append('skills', filters.skills);
+    if (filters.min_experience) params.append('min_experience', filters.min_experience);
+    if (filters.max_experience) params.append('max_experience', filters.max_experience);
+    if (filters.job_description_id) params.append('job_description_id', filters.job_description_id);
+    params.append('limit', String(cmPageSize));
+    if (cursor) params.append('cursor', cursor);
+    return params;
+}
+
+function resetCmPagination() {
+    cmCurrentPage = 1;
+    cmCursorByPage = { 1: null };
+    cmNextCursor = null;
+    cmHasMore = false;
+    cmPrefetchCache = new Map();
+}
+
+function renderCmPagination() {
+    const pagination = document.getElementById('cm-pagination');
+    if (!pagination) {
+        return;
+    }
+    const totalPages = Math.max(1, Math.ceil(cmTotalCount / cmPageSize));
+    const from = cmTotalCount ? ((cmCurrentPage - 1) * cmPageSize) + 1 : 0;
+    const to = Math.min(cmCurrentPage * cmPageSize, cmTotalCount);
+    pagination.innerHTML = `
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div class="small text-muted">Showing ${from}-${to} of ${cmTotalCount}</div>
+            <div class="d-flex align-items-center gap-2">
+                <label class="small text-muted mb-0">Rows</label>
+                <select class="form-select form-select-sm" id="cm-page-size" style="width: 90px;">
+                    <option value="20" ${cmPageSize === 20 ? 'selected' : ''}>20</option>
+                    <option value="50" ${cmPageSize === 50 ? 'selected' : ''}>50</option>
+                    <option value="100" ${cmPageSize === 100 ? 'selected' : ''}>100</option>
+                </select>
+                <button class="btn btn-sm btn-outline-secondary" id="cm-page-prev" ${cmCurrentPage <= 1 ? 'disabled' : ''}>Prev</button>
+                <span class="small fw-semibold">Page ${cmCurrentPage} / ${totalPages}</span>
+                <button class="btn btn-sm btn-outline-secondary" id="cm-page-next" ${cmHasMore ? '' : 'disabled'}>Next</button>
+            </div>
+        </div>
+    `;
+    const pageSizeSelect = document.getElementById('cm-page-size');
+    if (pageSizeSelect) {
+        pageSizeSelect.onchange = async () => {
+            cmPageSize = parseInt(pageSizeSelect.value, 10) || 20;
+            resetCmPagination();
+            await loadCandidatesManagement();
+        };
+    }
+    const prevButton = document.getElementById('cm-page-prev');
+    if (prevButton) {
+        prevButton.onclick = async () => {
+            if (cmCurrentPage <= 1) {
+                return;
+            }
+            cmCurrentPage -= 1;
+            await loadCandidatesManagement();
+        };
+    }
+    const nextButton = document.getElementById('cm-page-next');
+    if (nextButton) {
+        nextButton.onclick = async () => {
+            if (!cmHasMore) {
+                return;
+            }
+            cmCurrentPage += 1;
+            await loadCandidatesManagement();
+        };
+    }
+}
+
+function prefetchCmPage(filters, cursor) {
+    if (!cursor) {
+        return;
+    }
+    const params = buildCmParams(filters, cursor);
+    const key = params.toString();
+    if (cmPrefetchCache.has(key)) {
+        return;
+    }
+    fetch(`${API_BASE_URL}/api/candidates/summary/paged?${key}`)
+        .then(response => response.ok ? response.json() : null)
+        .then(payload => {
+            if (payload) {
+                cmPrefetchCache.set(key, payload);
+            }
+        })
+        .catch(() => {});
+}
+
+function renderCmDetailPane(item) {
+    const pane = document.getElementById('cm-detail-content');
+    if (!pane) {
+        return;
+    }
+    if (!item) {
+        pane.innerHTML = '<p class="text-muted mb-0">Select a candidate to preview details.</p>';
+        return;
+    }
+    const candidate = item.candidate || {};
+    const profile = item.profile || {};
+    const latestAnalysis = item.latest_analysis || null;
+    const jobLinks = item.job_links || [];
+    const skillText = [...(profile.primary_skills || []), ...(profile.secondary_skills || [])].slice(0, 8).join(', ');
+    const linksText = jobLinks.length ? jobLinks.map(link => escapeHtml(link.title)).join(', ') : 'No JD linked';
+    pane.innerHTML = `
+        <div class="mb-2">
+            <div class="fw-semibold">${formatCandidateName(candidate.name)} <span class="text-muted small">#${candidate.id}</span></div>
+            <div class="value">${profile.headline || profile.current_role || 'Role not specified'}</div>
+        </div>
+        <div class="mb-2 small">
+            <div><strong>Experience:</strong> ${profile.total_experience_years ?? 'N/A'} years</div>
+            <div><strong>Email:</strong> ${candidate.email || 'N/A'}</div>
+            <div><strong>Phone:</strong> ${candidate.phone || 'N/A'}</div>
+        </div>
+        <div class="mb-2 small">
+            <div><strong>Skills:</strong> ${escapeHtml(skillText || 'N/A')}</div>
+            <div><strong>JD Links:</strong> ${linksText}</div>
+        </div>
+        <div class="mb-3 small">
+            <strong>Latest Analysis:</strong> ${latestAnalysis?.decision || 'Pending'}${typeof latestAnalysis?.final_score === 'number' ? ` (${latestAnalysis.final_score.toFixed(2)}/100)` : ''}
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="viewCandidateDetail(${candidate.id})">Open Full Detail</button>
+            <button class="btn btn-sm btn-outline-primary" onclick="openEditCandidate(${candidate.id})">Edit</button>
+            ${candidate.resume_file_path ? `<a class="btn btn-sm btn-outline-info" href="${API_BASE_URL}/api/candidates/${candidate.id}/resume" target="_blank">Resume</a>` : ''}
+        </div>
+    `;
+}
+
+function resetCmSelection(filters = getCmFilters()) {
+    cmSelectionState = {
+        allMatchingSelected: false,
+        selectedIds: new Set(),
+        excludedIds: new Set(),
+        filters: { ...filters },
+    };
+}
+
+function isCmCandidateSelected(candidateId) {
+    if (cmSelectionState.allMatchingSelected) {
+        return !cmSelectionState.excludedIds.has(candidateId);
+    }
+    return cmSelectionState.selectedIds.has(candidateId);
+}
+
+function setCmCandidateSelection(candidateId, checked) {
+    if (cmSelectionState.allMatchingSelected) {
+        if (checked) {
+            cmSelectionState.excludedIds.delete(candidateId);
+        } else {
+            cmSelectionState.excludedIds.add(candidateId);
+        }
+    } else if (checked) {
+        cmSelectionState.selectedIds.add(candidateId);
+    } else {
+        cmSelectionState.selectedIds.delete(candidateId);
+    }
+}
+
+function applyCmSelectAllToPage(checked) {
+    cmCurrentItems.forEach(item => {
+        const candidateId = (item.candidate || {}).id;
+        if (candidateId) {
+            setCmCandidateSelection(candidateId, checked);
+        }
+    });
+    document.querySelectorAll('.cm-select').forEach(box => {
+        box.checked = checked;
+    });
+    refreshCmSelectionUi();
+}
+
+function getCmSelectedCount() {
+    if (cmSelectionState.allMatchingSelected) {
+        return Math.max(0, cmTotalCount - cmSelectionState.excludedIds.size);
+    }
+    return cmSelectionState.selectedIds.size;
+}
+
+function refreshCmSelectionUi() {
+    const selectAll = document.getElementById('cm-select-all');
+    if (selectAll) {
+        const pageIds = cmCurrentItems.map(item => item.candidate?.id).filter(Boolean);
+        const allChecked = pageIds.length > 0 && pageIds.every(id => isCmCandidateSelected(id));
+        selectAll.checked = allChecked;
+    }
+    renderCmSelectionBanner();
+}
+
+function renderCmSelectionBanner() {
+    const banner = document.getElementById('cm-selection-banner');
+    if (!banner) {
+        return;
+    }
+    const selectedCount = getCmSelectedCount();
+    if (selectedCount === 0) {
+        banner.classList.add('d-none');
+        banner.innerHTML = '';
+        return;
+    }
+    const canSelectAllMatching = !cmSelectionState.allMatchingSelected && cmTotalCount > selectedCount;
+    banner.classList.remove('d-none');
+    banner.innerHTML = `
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div class="small fw-semibold">${selectedCount} candidate(s) selected</div>
+            <div class="d-flex gap-2">
+                ${canSelectAllMatching ? `<button class="btn btn-sm btn-outline-primary" id="cm-select-all-matching">Select all ${cmTotalCount} matching</button>` : ''}
+                ${cmSelectionState.allMatchingSelected ? `<button class="btn btn-sm btn-outline-secondary" id="cm-clear-all-matching">Use explicit selection</button>` : ''}
+                <button class="btn btn-sm btn-outline-danger" id="cm-clear-selection">Clear selection</button>
+            </div>
+        </div>
+    `;
+    const selectAllMatching = document.getElementById('cm-select-all-matching');
+    if (selectAllMatching) {
+        selectAllMatching.onclick = () => {
+            cmSelectionState.allMatchingSelected = true;
+            cmSelectionState.selectedIds = new Set();
+            cmSelectionState.excludedIds = new Set();
+            refreshCmSelectionUi();
+            document.querySelectorAll('.cm-select').forEach(box => {
+                box.checked = true;
+            });
+        };
+    }
+    const clearAllMatching = document.getElementById('cm-clear-all-matching');
+    if (clearAllMatching) {
+        clearAllMatching.onclick = () => {
+            cmSelectionState.allMatchingSelected = false;
+            cmSelectionState.selectedIds = new Set();
+            cmSelectionState.excludedIds = new Set();
+            refreshCmSelectionUi();
+            document.querySelectorAll('.cm-select').forEach(box => {
+                box.checked = false;
+            });
+        };
+    }
+    const clearSelection = document.getElementById('cm-clear-selection');
+    if (clearSelection) {
+        clearSelection.onclick = () => {
+            resetCmSelection(cmSelectionState.filters);
+            refreshCmSelectionUi();
+            document.querySelectorAll('.cm-select').forEach(box => {
+                box.checked = false;
+            });
+        };
+    }
+}
+
+function getCmBulkPayload() {
+    if (cmSelectionState.allMatchingSelected) {
+        return {
+            all_matching: true,
+            excluded_ids: Array.from(cmSelectionState.excludedIds),
+            filters: cmSelectionState.filters,
+        };
+    }
+    return {
+        candidate_ids: Array.from(cmSelectionState.selectedIds),
+    };
+}
+
+function loadCmSavedFilters() {
+    try {
+        return JSON.parse(localStorage.getItem(CM_SAVED_FILTERS_KEY) || '[]');
+    } catch (error) {
+        return [];
+    }
+}
+
+function saveCmSavedFilters(filters) {
+    localStorage.setItem(CM_SAVED_FILTERS_KEY, JSON.stringify(filters));
+}
+
+function renderCmSavedFilters() {
+    const select = document.getElementById('cm-saved-filter-select');
+    if (!select) {
+        return;
+    }
+    const entries = loadCmSavedFilters();
+    select.innerHTML = '<option value="">Select saved filter...</option>';
+    entries.forEach(entry => {
+        select.innerHTML += `<option value="${entry.id}">${escapeHtml(entry.name)}</option>`;
+    });
+}
+
+async function applyCmSavedFilterById(filterId) {
+    const entries = loadCmSavedFilters();
+    const entry = entries.find(item => item.id === filterId);
+    if (!entry) {
+        showToast('Saved filter not found', 'warning');
+        return;
+    }
+    applyCmFiltersToForm(entry.filters || {});
+    resetCmPagination();
+    await loadCandidatesManagement();
 }
 
 async function viewCandidateDetail(candidateId) {
@@ -2274,6 +2689,11 @@ async function deleteCandidate(candidateId) {
     }
     try {
         await apiCall(`/api/candidates/${candidateId}`, { method: 'DELETE' });
+        cmSelectionState.selectedIds.delete(candidateId);
+        cmSelectionState.excludedIds.delete(candidateId);
+        if (cmActiveCandidateId === candidateId) {
+            cmActiveCandidateId = null;
+        }
         showToast('Candidate deleted');
         loadCandidatesManagement();
     } catch (error) {
@@ -2419,28 +2839,95 @@ if (folderUploadButton) {
 
 const filterApplyButton = document.getElementById('cm-filter-apply');
 if (filterApplyButton) {
-    filterApplyButton.addEventListener('click', loadCandidatesManagement);
+    filterApplyButton.addEventListener('click', async () => {
+        resetCmPagination();
+        await loadCandidatesManagement();
+    });
+}
+
+const filterResetButton = document.getElementById('cm-filter-reset');
+if (filterResetButton) {
+    filterResetButton.addEventListener('click', async () => {
+        applyCmFiltersToForm({
+            name: '',
+            skills: '',
+            min_experience: '',
+            max_experience: '',
+            job_description_id: '',
+        });
+        resetCmPagination();
+        resetCmSelection(getCmFilters());
+        await loadCandidatesManagement();
+    });
+}
+
+const filterSaveButton = document.getElementById('cm-filter-save');
+if (filterSaveButton) {
+    filterSaveButton.addEventListener('click', () => {
+        const input = document.getElementById('cm-saved-filter-name');
+        const name = input?.value?.trim();
+        if (!name) {
+            showToast('Enter a preset name before saving', 'warning');
+            return;
+        }
+        const all = loadCmSavedFilters();
+        const id = `cmf_${Date.now()}`;
+        all.push({ id, name, filters: getCmFilters(), created_at: new Date().toISOString() });
+        saveCmSavedFilters(all.slice(-15));
+        if (input) {
+            input.value = '';
+        }
+        renderCmSavedFilters();
+        showToast('Filter preset saved');
+    });
+}
+
+const filterLoadButton = document.getElementById('cm-filter-load');
+if (filterLoadButton) {
+    filterLoadButton.addEventListener('click', async () => {
+        const selectedId = document.getElementById('cm-saved-filter-select')?.value || '';
+        if (!selectedId) {
+            showToast('Select a saved filter first', 'warning');
+            return;
+        }
+        await applyCmSavedFilterById(selectedId);
+    });
+}
+
+const filterDeleteButton = document.getElementById('cm-filter-delete');
+if (filterDeleteButton) {
+    filterDeleteButton.addEventListener('click', () => {
+        const selectedId = document.getElementById('cm-saved-filter-select')?.value || '';
+        if (!selectedId) {
+            showToast('Select a saved filter to delete', 'warning');
+            return;
+        }
+        const entries = loadCmSavedFilters().filter(entry => entry.id !== selectedId);
+        saveCmSavedFilters(entries);
+        renderCmSavedFilters();
+        showToast('Saved filter deleted');
+    });
 }
 
 const bulkDeleteButton = document.getElementById('cm-bulk-delete');
 if (bulkDeleteButton) {
     bulkDeleteButton.addEventListener('click', async () => {
-        const selected = Array.from(document.querySelectorAll('.cm-select'))
-            .filter(box => box.checked)
-            .map(box => parseInt(box.dataset.candidateId, 10));
-        if (!selected.length) {
+        const selectedCount = getCmSelectedCount();
+        if (!selectedCount) {
             showToast('Select candidates to delete', 'warning');
             return;
         }
-        if (!confirm(`Delete ${selected.length} candidates and all data?`)) {
+        if (!confirm(`Delete ${selectedCount} candidates and all data?`)) {
             return;
         }
         try {
             await apiCall('/api/candidates/bulk-delete', {
                 method: 'POST',
-                body: JSON.stringify(selected),
+                body: JSON.stringify(getCmBulkPayload()),
             });
             showToast('Candidates deleted');
+            resetCmSelection(getCmFilters());
+            resetCmPagination();
             loadCandidatesManagement();
         } catch (error) {
             showToast(`Bulk delete failed: ${error.message}`, 'danger');
@@ -2452,20 +2939,17 @@ const bulkLinkButton = document.getElementById('cm-bulk-link');
 if (bulkLinkButton) {
     bulkLinkButton.addEventListener('click', async () => {
         const jdId = document.getElementById('cm-bulk-link-jd').value;
-        const selected = Array.from(document.querySelectorAll('.cm-select'))
-            .filter(box => box.checked)
-            .map(box => parseInt(box.dataset.candidateId, 10));
-        if (!jdId || !selected.length) {
+        const selectedCount = getCmSelectedCount();
+        if (!jdId || !selectedCount) {
             showToast('Select candidates and a job description to link', 'warning');
             return;
         }
         try {
+            const payload = getCmBulkPayload();
+            payload.job_description_id = parseInt(jdId, 10);
             await apiCall('/api/candidates/link-jd', {
                 method: 'POST',
-                body: JSON.stringify({
-                    candidate_ids: selected,
-                    job_description_id: parseInt(jdId, 10),
-                }),
+                body: JSON.stringify(payload),
             });
             showToast('Candidates linked to JD');
             loadCandidatesManagement();

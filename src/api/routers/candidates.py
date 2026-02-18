@@ -1,5 +1,6 @@
 """Router for candidate endpoints."""
 
+import base64
 from io import BytesIO
 import re
 import os
@@ -9,7 +10,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, or_
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.agent.hiring_agent import HiringAgent
@@ -119,6 +120,105 @@ def _is_likely_resume(text: str) -> bool:
     keywords = ["experience", "education", "skills", "project", "responsibilities", "summary"]
     found = sum(1 for keyword in keywords if keyword in text.lower())
     return found >= 2
+
+
+def _apply_candidate_filters(
+    query,
+    *,
+    job_description_id: int | None = None,
+    name: str | None = None,
+    skills: str | None = None,
+    min_experience: float | None = None,
+    max_experience: float | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+):
+    if job_description_id is not None:
+        query = query.outerjoin(CandidateJobLink, Candidate.id == CandidateJobLink.candidate_id)
+        query = query.where(CandidateJobLink.job_description_id == job_description_id)
+    if name:
+        query = query.where(Candidate.name.ilike(f"%{name}%"))
+    if min_experience is not None:
+        query = query.where(CandidateProfile.total_experience_years >= min_experience)
+    if max_experience is not None:
+        query = query.where(CandidateProfile.total_experience_years <= max_experience)
+    if skills:
+        skill_terms = [term.strip().lower() for term in skills.split(",") if term.strip()]
+        for term in skill_terms:
+            query = query.where(
+                or_(
+                    CandidateProfile.primary_skills.like(f"%{term}%"),
+                    CandidateProfile.secondary_skills.like(f"%{term}%"),
+                    Candidate.resume_text.ilike(f"%{term}%"),
+                )
+            )
+    if created_from:
+        query = query.where(Candidate.created_at >= created_from)
+    if created_to:
+        query = query.where(Candidate.created_at <= created_to)
+    return query
+
+
+def _encode_candidate_cursor(created_at: datetime, candidate_id: int) -> str:
+    payload = f"{created_at.isoformat()}|{candidate_id}"
+    return base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii")
+
+
+def _decode_candidate_cursor(cursor: str) -> tuple[datetime, int]:
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8")
+        timestamp, candidate_id = raw.rsplit("|", 1)
+        return datetime.fromisoformat(timestamp), int(candidate_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid cursor") from exc
+
+
+async def _build_candidate_summary_items(rows: list[tuple], db: AsyncSession) -> list[dict]:
+    candidate_ids = [candidate.id for candidate, _ in rows]
+    link_map: dict[int, list[dict]] = {}
+    latest_analysis_map: dict[int, dict] = {}
+
+    if candidate_ids:
+        links_result = await db.execute(
+            select(CandidateJobLink, JobDescription)
+            .join(JobDescription, CandidateJobLink.job_description_id == JobDescription.id)
+            .where(CandidateJobLink.candidate_id.in_(candidate_ids))
+        )
+        for link, jd in links_result.all():
+            link_map.setdefault(link.candidate_id, []).append(
+                {
+                    "job_description_id": jd.id,
+                    "title": jd.title,
+                    "confidence": link.confidence,
+                }
+            )
+
+        runs_result = await db.execute(
+            select(CandidateAnalysisRun, JobDescription)
+            .join(JobDescription, CandidateAnalysisRun.job_description_id == JobDescription.id)
+            .where(CandidateAnalysisRun.candidate_id.in_(candidate_ids))
+            .order_by(
+                CandidateAnalysisRun.candidate_id,
+                CandidateAnalysisRun.analysis_timestamp.desc(),
+                CandidateAnalysisRun.id.desc(),
+            )
+        )
+        for run, jd in runs_result.all():
+            if run.candidate_id in latest_analysis_map:
+                continue
+            payload = run.to_dict()
+            payload["job_description_title"] = jd.title
+            latest_analysis_map[run.candidate_id] = payload
+
+    return [
+        {
+            "candidate": candidate.to_dict(),
+            "profile": profile.to_dict() if profile else None,
+            "job_links": link_map.get(candidate.id, []),
+            "latest_analysis": latest_analysis_map.get(candidate.id),
+        }
+        for candidate, profile in rows
+    ]
 
 
 async def _build_profile(
@@ -466,30 +566,16 @@ async def list_candidates(
         .outerjoin(CandidateProfile, Candidate.id == CandidateProfile.candidate_id)
         .order_by(Candidate.created_at.desc())
     )
-
-    if job_description_id is not None:
-        query = query.outerjoin(CandidateJobLink, Candidate.id == CandidateJobLink.candidate_id)
-        query = query.where(CandidateJobLink.job_description_id == job_description_id)
-    if name:
-        query = query.where(Candidate.name.ilike(f"%{name}%"))
-    if min_experience is not None:
-        query = query.where(CandidateProfile.total_experience_years >= min_experience)
-    if max_experience is not None:
-        query = query.where(CandidateProfile.total_experience_years <= max_experience)
-    if skills:
-        skill_terms = [term.strip().lower() for term in skills.split(",") if term.strip()]
-        for term in skill_terms:
-            query = query.where(
-                or_(
-                    CandidateProfile.primary_skills.like(f"%{term}%"),
-                    CandidateProfile.secondary_skills.like(f"%{term}%"),
-                    Candidate.resume_text.ilike(f"%{term}%"),
-                )
-            )
-    if created_from:
-        query = query.where(Candidate.created_at >= created_from)
-    if created_to:
-        query = query.where(Candidate.created_at <= created_to)
+    query = _apply_candidate_filters(
+        query,
+        job_description_id=job_description_id,
+        name=name,
+        skills=skills,
+        min_experience=min_experience,
+        max_experience=max_experience,
+        created_from=created_from,
+        created_to=created_to,
+    )
 
     query = query.offset(skip).limit(limit)
 
@@ -515,80 +601,100 @@ async def list_candidates_summary(
     query = (
         select(Candidate, CandidateProfile)
         .outerjoin(CandidateProfile, Candidate.id == CandidateProfile.candidate_id)
-        .order_by(Candidate.created_at.desc())
+        .order_by(Candidate.created_at.desc(), Candidate.id.desc())
     )
-    if job_description_id is not None:
-        query = query.outerjoin(CandidateJobLink, Candidate.id == CandidateJobLink.candidate_id)
-        query = query.where(CandidateJobLink.job_description_id == job_description_id)
-    if name:
-        query = query.where(Candidate.name.ilike(f"%{name}%"))
-    if min_experience is not None:
-        query = query.where(CandidateProfile.total_experience_years >= min_experience)
-    if max_experience is not None:
-        query = query.where(CandidateProfile.total_experience_years <= max_experience)
-    if skills:
-        skill_terms = [term.strip().lower() for term in skills.split(",") if term.strip()]
-        for term in skill_terms:
-            query = query.where(
-                or_(
-                    CandidateProfile.primary_skills.like(f"%{term}%"),
-                    CandidateProfile.secondary_skills.like(f"%{term}%"),
-                    Candidate.resume_text.ilike(f"%{term}%"),
-                )
-            )
-    if created_from:
-        query = query.where(Candidate.created_at >= created_from)
-    if created_to:
-        query = query.where(Candidate.created_at <= created_to)
+    query = _apply_candidate_filters(
+        query,
+        job_description_id=job_description_id,
+        name=name,
+        skills=skills,
+        min_experience=min_experience,
+        max_experience=max_experience,
+        created_from=created_from,
+        created_to=created_to,
+    )
 
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
     rows = result.all()
-    candidate_ids = [candidate.id for candidate, _ in rows]
-    links_result = await db.execute(
-        select(CandidateJobLink, JobDescription)
-        .join(JobDescription, CandidateJobLink.job_description_id == JobDescription.id)
-        .where(CandidateJobLink.candidate_id.in_(candidate_ids))
-    )
-    links = links_result.all()
-    link_map: dict[int, list[dict]] = {}
-    for link, jd in links:
-        link_map.setdefault(link.candidate_id, []).append(
-            {
-                "job_description_id": jd.id,
-                "title": jd.title,
-                "confidence": link.confidence,
-            }
-        )
+    return await _build_candidate_summary_items(rows, db)
 
-    latest_analysis_map: dict[int, dict] = {}
-    if candidate_ids:
-        runs_result = await db.execute(
-            select(CandidateAnalysisRun, JobDescription)
-            .join(JobDescription, CandidateAnalysisRun.job_description_id == JobDescription.id)
-            .where(CandidateAnalysisRun.candidate_id.in_(candidate_ids))
-            .order_by(
-                CandidateAnalysisRun.candidate_id,
-                CandidateAnalysisRun.analysis_timestamp.desc(),
-                CandidateAnalysisRun.id.desc(),
+
+@router.get("/summary/paged")
+async def list_candidates_summary_paged(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    job_description_id: int | None = None,
+    name: str | None = None,
+    skills: str | None = None,
+    min_experience: float | None = None,
+    max_experience: float | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    limit: Annotated[int, Query] = 20,
+    cursor: str | None = None,
+) -> dict:
+    """Cursor-paged candidate summary for high-volume management screens."""
+    page_limit = max(1, min(limit, 100))
+    query = (
+        select(Candidate, CandidateProfile)
+        .outerjoin(CandidateProfile, Candidate.id == CandidateProfile.candidate_id)
+        .order_by(Candidate.created_at.desc(), Candidate.id.desc())
+    )
+    query = _apply_candidate_filters(
+        query,
+        job_description_id=job_description_id,
+        name=name,
+        skills=skills,
+        min_experience=min_experience,
+        max_experience=max_experience,
+        created_from=created_from,
+        created_to=created_to,
+    )
+
+    if cursor:
+        cursor_ts, cursor_id = _decode_candidate_cursor(cursor)
+        query = query.where(
+            or_(
+                Candidate.created_at < cursor_ts,
+                and_(Candidate.created_at == cursor_ts, Candidate.id < cursor_id),
             )
         )
-        for run, jd in runs_result.all():
-            if run.candidate_id in latest_analysis_map:
-                continue
-            payload = run.to_dict()
-            payload["job_description_title"] = jd.title
-            latest_analysis_map[run.candidate_id] = payload
 
-    return [
-        {
-            "candidate": candidate.to_dict(),
-            "profile": profile.to_dict() if profile else None,
-            "job_links": link_map.get(candidate.id, []),
-            "latest_analysis": latest_analysis_map.get(candidate.id),
-        }
-        for candidate, profile in rows
-    ]
+    result = await db.execute(query.limit(page_limit + 1))
+    rows = result.all()
+    has_more = len(rows) > page_limit
+    page_rows = rows[:page_limit]
+    items = await _build_candidate_summary_items(page_rows, db)
+
+    next_cursor = None
+    if has_more and page_rows:
+        last_candidate = page_rows[-1][0]
+        next_cursor = _encode_candidate_cursor(last_candidate.created_at, last_candidate.id)
+
+    count_query = (
+        select(func.count(func.distinct(Candidate.id)))
+        .select_from(Candidate)
+        .outerjoin(CandidateProfile, Candidate.id == CandidateProfile.candidate_id)
+    )
+    count_query = _apply_candidate_filters(
+        count_query,
+        job_description_id=job_description_id,
+        name=name,
+        skills=skills,
+        min_experience=min_experience,
+        max_experience=max_experience,
+        created_from=created_from,
+        created_to=created_to,
+    )
+    total_count = (await db.execute(count_query)).scalar_one() or 0
+
+    return {
+        "items": items,
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+        "limit": page_limit,
+        "total_count": int(total_count),
+    }
 
 
 @router.get("/{candidate_id}/detail", response_model=CandidateDetailResponse)
@@ -945,12 +1051,57 @@ async def delete_candidate(
     return {"status": "deleted", "candidate_id": candidate_id}
 
 
+async def _resolve_bulk_candidate_ids(payload: dict | list[int], db: AsyncSession) -> list[int]:
+    if isinstance(payload, list):
+        return [int(candidate_id) for candidate_id in payload]
+
+    candidate_ids = payload.get("candidate_ids") or []
+    if candidate_ids:
+        return [int(candidate_id) for candidate_id in candidate_ids]
+
+    if not payload.get("all_matching"):
+        return []
+
+    filters = payload.get("filters") or {}
+    try:
+        job_description_id = int(filters.get("job_description_id")) if filters.get("job_description_id") not in (None, "") else None
+    except (TypeError, ValueError):
+        job_description_id = None
+    try:
+        min_experience = float(filters.get("min_experience")) if filters.get("min_experience") not in (None, "") else None
+    except (TypeError, ValueError):
+        min_experience = None
+    try:
+        max_experience = float(filters.get("max_experience")) if filters.get("max_experience") not in (None, "") else None
+    except (TypeError, ValueError):
+        max_experience = None
+    excluded_ids = [int(candidate_id) for candidate_id in (payload.get("excluded_ids") or [])]
+
+    query = select(Candidate.id).outerjoin(CandidateProfile, Candidate.id == CandidateProfile.candidate_id)
+    query = _apply_candidate_filters(
+        query,
+        job_description_id=job_description_id,
+        name=filters.get("name"),
+        skills=filters.get("skills"),
+        min_experience=min_experience,
+        max_experience=max_experience,
+        created_from=filters.get("created_from"),
+        created_to=filters.get("created_to"),
+    )
+    if excluded_ids:
+        query = query.where(~Candidate.id.in_(excluded_ids))
+
+    result = await db.execute(query)
+    return [int(candidate_id) for candidate_id in result.scalars().all()]
+
+
 @router.post("/bulk-delete")
 async def bulk_delete_candidates(
-    candidate_ids: list[int],
+    payload: dict | list[int],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     """Bulk delete candidates and their resumes."""
+    candidate_ids = await _resolve_bulk_candidate_ids(payload, db)
     if not candidate_ids:
         raise HTTPException(status_code=400, detail="candidate_ids required")
 
@@ -984,7 +1135,7 @@ async def bulk_link_candidates_to_jd(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     """Link candidates to a job description."""
-    candidate_ids = payload.get("candidate_ids") or []
+    candidate_ids = await _resolve_bulk_candidate_ids(payload, db)
     job_description_id = payload.get("job_description_id")
     if not candidate_ids or not job_description_id:
         raise HTTPException(status_code=400, detail="candidate_ids and job_description_id required")
