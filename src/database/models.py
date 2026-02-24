@@ -43,6 +43,8 @@ class JobDescription(Base):
     required_skills: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     min_experience_years: Mapped[int] = mapped_column(Integer, default=0)
     domain: Mapped[str] = mapped_column(String(100), nullable=True)
+    source_system: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -62,6 +64,8 @@ class JobDescription(Base):
             "required_skills": self.required_skills,
             "min_experience_years": self.min_experience_years,
             "domain": self.domain,
+            "source_system": self.source_system,
+            "source_key": self.source_key,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

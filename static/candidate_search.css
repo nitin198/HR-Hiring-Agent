@@ -1,0 +1,156 @@
+:root {
+    --primary: #0f766e;
+    --primary-dark: #0c4a6e;
+    --bg-soft: #f1f5f9;
+    --ink: #0f172a;
+}
+
+body {
+    background: radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 48%),
+                linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+    min-height: 100vh;
+    color: var(--ink);
+    font-family: "Manrope", "Segoe UI", Tahoma, sans-serif;
+}
+
+.page-shell {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 1.25rem 1rem 2rem;
+}
+
+.card {
+    border: 1px solid rgba(15, 118, 110, 0.12);
+    border-radius: 14px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    border: none;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #16a34a, #15803d);
+    border: none;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem;
+}
+
+.summary-card {
+    background: #ffffff;
+    border: 1px solid rgba(15, 118, 110, 0.14);
+    border-radius: 12px;
+    padding: 0.75rem 0.85rem;
+}
+
+.summary-card .label {
+    font-size: 0.8rem;
+    color: #475569;
+}
+
+.summary-card .value {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.jd-group {
+    background: #fff;
+    border: 1px solid rgba(15, 118, 110, 0.14);
+    border-radius: 12px;
+    padding: 0.9rem;
+    margin-bottom: 0.9rem;
+}
+
+.jd-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.7rem;
+    margin-bottom: 0.7rem;
+}
+
+.jd-title {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.jd-meta {
+    font-size: 0.78rem;
+    color: #475569;
+}
+
+.section-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin-bottom: 0.45rem;
+}
+
+.section-title .badge {
+    vertical-align: middle;
+}
+
+.table-sm td, .table-sm th {
+    vertical-align: middle;
+}
+
+.decision-badge {
+    padding: 0.28rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.decision-strong_hire {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.decision-borderline {
+    background: #ffedd5;
+    color: #9a3412;
+}
+
+.decision-hold {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.decision-reject {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.decision-na {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.skill-chip {
+    display: inline-block;
+    background: var(--bg-soft);
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    padding: 0.1rem 0.45rem;
+    font-size: 0.72rem;
+    margin-right: 0.2rem;
+    margin-bottom: 0.2rem;
+}
+
+.loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 0.5rem;
+}
+
+.empty-state {
+    text-align: center;
+    color: #475569;
+    padding: 2rem 0.5rem;
+}

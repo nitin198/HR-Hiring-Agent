@@ -16,6 +16,7 @@ from src.config.settings import get_settings
 from src.database.connection import async_session_maker, init_db
 from src.services.gmail_activity_log import GmailActivityLog
 from src.services.gmail_sync_service import GmailSyncService
+from src.services.job_description_sync_service import JobDescriptionSyncService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -50,14 +51,51 @@ async def _gmail_scheduler_loop() -> None:
         await asyncio.sleep(interval_seconds)
 
 
+async def _idsil_jd_scheduler_loop() -> None:
+    """Run IDSIL job description sync on configured interval."""
+    interval_minutes = max(settings.idsil_jd_sync_interval_minutes, 1)
+    interval_seconds = interval_minutes * 60
+    sync_limit = max(settings.idsil_jd_sync_limit, 1)
+
+    logger.info(
+        "IDSIL JD scheduler started (every %s minute(s), limit=%s).",
+        interval_minutes,
+        sync_limit,
+    )
+
+    while True:
+        try:
+            async with async_session_maker() as session:
+                result = await JobDescriptionSyncService().sync_idsil_openings(
+                    db=session,
+                    limit=sync_limit,
+                    trigger="scheduler",
+                )
+                logger.info(
+                    "IDSIL JD sync completed: created=%s duplicates_skipped=%s invalid_skipped=%s",
+                    result.get("created"),
+                    result.get("duplicates_skipped"),
+                    result.get("invalid_skipped"),
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Scheduled IDSIL JD sync failed")
+
+        await asyncio.sleep(interval_seconds)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     await init_db()
 
     scheduler_task: asyncio.Task | None = None
+    idsil_jd_task: asyncio.Task | None = None
     if settings.gmail_enabled:
         scheduler_task = asyncio.create_task(_gmail_scheduler_loop())
+    if settings.idsil_jd_sync_enabled:
+        idsil_jd_task = asyncio.create_task(_idsil_jd_scheduler_loop())
 
     try:
         yield
@@ -66,6 +104,10 @@ async def lifespan(app: FastAPI):
             scheduler_task.cancel()
             with suppress(asyncio.CancelledError):
                 await scheduler_task
+        if idsil_jd_task:
+            idsil_jd_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await idsil_jd_task
 
 
 app = FastAPI(

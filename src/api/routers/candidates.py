@@ -755,6 +755,34 @@ async def get_analysis_run(
     return payload
 
 
+@router.get("/analysis-runs/{run_id}/pdf")
+async def download_analysis_run_pdf(
+    run_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> StreamingResponse:
+    """Download a single analysis-run report as PDF."""
+    result = await db.execute(
+        select(CandidateAnalysisRun, Candidate, JobDescription)
+        .join(Candidate, Candidate.id == CandidateAnalysisRun.candidate_id)
+        .join(JobDescription, JobDescription.id == CandidateAnalysisRun.job_description_id)
+        .where(CandidateAnalysisRun.id == run_id)
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+
+    run, candidate, jd = row
+    pdf_bytes = build_candidate_analysis_pdf(
+        candidate.to_dict(),
+        run.to_dict(),
+        jd.to_dict(),
+    )
+    safe_name = _safe_filename(candidate.name or f"candidate_{candidate.id}")
+    filename = f"{safe_name}_{candidate.id}_analysis_run_{run.id}.pdf"
+    headers = {"Content-Disposition": f"attachment; filename={filename}"}
+    return StreamingResponse(BytesIO(pdf_bytes), media_type="application/pdf", headers=headers)
+
+
 @router.put("/{candidate_id}", response_model=CandidateResponse)
 async def update_candidate(
     candidate_id: int,

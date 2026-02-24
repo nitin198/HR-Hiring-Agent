@@ -18,7 +18,6 @@ let pipelineTimer = null;
 let pipelineStage = 0;
 let pipelineProgress = [0, 0, 0, 0];
 let pipelineCompleted = false;
-const CM_SAVED_FILTERS_KEY = 'hr_hiring_agent_cm_saved_filters_v1';
 let cmCurrentItems = [];
 let cmCurrentPage = 1;
 let cmPageSize = 20;
@@ -1136,6 +1135,7 @@ function showMainTab(tabName) {
     // Load job descriptions if switching to job-descriptions tab
     if (tabName === 'job-descriptions') {
         loadJobDescriptionsList();
+        loadIdsilSyncStatus();
     }
 
     if (tabName === 'outlook-candidates') {
@@ -1153,7 +1153,6 @@ function showMainTab(tabName) {
 
     if (tabName === 'candidates-management') {
         loadCandidateManagementJds();
-        renderCmSavedFilters();
         loadCandidatesManagement();
     }
 
@@ -1553,6 +1552,96 @@ if (addOutlookButton) {
 }
 
 // Job Descriptions Management
+function formatLocalDateTime(value) {
+    if (!value) {
+        return 'N/A';
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return value;
+    }
+    return date.toLocaleString();
+}
+
+function renderIdsilSyncStatus(statusPayload) {
+    const statusText = document.getElementById('jd-sync-status-text');
+    const metaText = document.getElementById('jd-sync-meta');
+    const panel = document.querySelector('#job-descriptions-tab .jd-sync-panel');
+    if (!statusText || !metaText || !panel) {
+        return;
+    }
+
+    const status = statusPayload?.status || 'idle';
+    const created = Number(statusPayload?.created || 0);
+    const duplicates = Number(statusPayload?.duplicates_skipped || 0);
+    const invalid = Number(statusPayload?.invalid_skipped || 0);
+    const trigger = statusPayload?.trigger || 'manual';
+    const lastRunAt = formatLocalDateTime(statusPayload?.last_run_at);
+
+    panel.classList.remove('border-success', 'border-danger', 'border-warning');
+
+    if (status === 'success') {
+        panel.classList.add('border-success');
+        statusText.innerHTML = `<strong>Last sync successful.</strong> Added <strong>${created}</strong> new job descriptions.`;
+        metaText.textContent = `Skipped duplicates: ${duplicates} | Invalid records: ${invalid} | Trigger: ${trigger} | Last run: ${lastRunAt}`;
+        return;
+    }
+
+    if (status === 'failed') {
+        panel.classList.add('border-danger');
+        statusText.innerHTML = `<strong>Last sync failed.</strong> ${statusPayload?.message || 'Unable to sync IDSIL jobs.'}`;
+        metaText.textContent = `Last attempt: ${lastRunAt}`;
+        return;
+    }
+
+    panel.classList.add('border-warning');
+    statusText.textContent = statusPayload?.message || 'Sync has not run yet.';
+    metaText.textContent = 'Daily auto sync is enabled.';
+}
+
+async function loadIdsilSyncStatus() {
+    try {
+        const status = await apiCall('/api/job-descriptions/sync/idsil/status');
+        renderIdsilSyncStatus(status);
+    } catch (error) {
+        renderIdsilSyncStatus({
+            status: 'failed',
+            message: `Could not load sync status: ${error.message}`,
+            last_run_at: null,
+        });
+    }
+}
+
+async function syncIdsilJobDescriptions() {
+    const button = document.getElementById('jd-sync-now-btn');
+    const originalLabel = button ? button.innerHTML : '';
+
+    try {
+        if (button) {
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Syncing...';
+        }
+
+        const result = await apiCall('/api/job-descriptions/sync/idsil?limit=200', {
+            method: 'POST',
+        });
+
+        renderIdsilSyncStatus(result);
+        showToast(`IDSIL sync complete. Added ${result.created || 0} new JDs; skipped ${result.duplicates_skipped || 0} duplicates.`);
+        loadJobDescriptionsList();
+        loadJobDescriptions();
+        loadCandidateManagementJds();
+    } catch (error) {
+        showToast(`IDSIL sync failed: ${error.message}`, 'danger');
+        await loadIdsilSyncStatus();
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = originalLabel;
+        }
+    }
+}
+
 function getJobDescriptionFilters() {
     return {
         title: (document.getElementById('jd-filter-title')?.value || '').trim().toLowerCase(),
@@ -1959,10 +2048,38 @@ async function deleteJobDescription(jdId) {
     }
 }
 
+function setupJdSearchIframeAutoResize() {
+    const iframe = document.getElementById('jd-search-iframe');
+    if (!iframe) {
+        return;
+    }
+    let lastAppliedHeight = 0;
+
+    window.addEventListener('message', event => {
+        if (event.origin !== window.location.origin) {
+            return;
+        }
+        const payload = event.data || {};
+        if (payload.type !== 'jd_search_height') {
+            return;
+        }
+        const rawHeight = parseInt(payload.height || 0, 10);
+        if (!Number.isFinite(rawHeight) || rawHeight <= 0) {
+            return;
+        }
+        const nextHeight = Math.max(rawHeight, 900);
+        if (Math.abs(nextHeight - lastAppliedHeight) > 4) {
+            lastAppliedHeight = nextHeight;
+            iframe.style.height = `${nextHeight}px`;
+        }
+    });
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     loadJobDescriptions();
     loadJobDescriptionsList();
+    loadIdsilSyncStatus();
     loadOutlookCandidates(true);
     loadCandidateManagementJds();
 
@@ -1991,6 +2108,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    const jdSyncButton = document.getElementById('jd-sync-now-btn');
+    if (jdSyncButton) {
+        jdSyncButton.addEventListener('click', syncIdsilJobDescriptions);
+    }
+
+    setupJdSearchIframeAutoResize();
 });
 
 const refreshJdCandidatesButton = document.getElementById('btn-refresh-jd-candidates');
@@ -2517,42 +2641,6 @@ function getCmBulkPayload() {
     };
 }
 
-function loadCmSavedFilters() {
-    try {
-        return JSON.parse(localStorage.getItem(CM_SAVED_FILTERS_KEY) || '[]');
-    } catch (error) {
-        return [];
-    }
-}
-
-function saveCmSavedFilters(filters) {
-    localStorage.setItem(CM_SAVED_FILTERS_KEY, JSON.stringify(filters));
-}
-
-function renderCmSavedFilters() {
-    const select = document.getElementById('cm-saved-filter-select');
-    if (!select) {
-        return;
-    }
-    const entries = loadCmSavedFilters();
-    select.innerHTML = '<option value="">Select saved filter...</option>';
-    entries.forEach(entry => {
-        select.innerHTML += `<option value="${entry.id}">${escapeHtml(entry.name)}</option>`;
-    });
-}
-
-async function applyCmSavedFilterById(filterId) {
-    const entries = loadCmSavedFilters();
-    const entry = entries.find(item => item.id === filterId);
-    if (!entry) {
-        showToast('Saved filter not found', 'warning');
-        return;
-    }
-    applyCmFiltersToForm(entry.filters || {});
-    resetCmPagination();
-    await loadCandidatesManagement();
-}
-
 async function viewCandidateDetail(candidateId) {
     try {
         const detail = await apiCall(`/api/candidates/${candidateId}/detail`);
@@ -2858,54 +2946,6 @@ if (filterResetButton) {
         resetCmPagination();
         resetCmSelection(getCmFilters());
         await loadCandidatesManagement();
-    });
-}
-
-const filterSaveButton = document.getElementById('cm-filter-save');
-if (filterSaveButton) {
-    filterSaveButton.addEventListener('click', () => {
-        const input = document.getElementById('cm-saved-filter-name');
-        const name = input?.value?.trim();
-        if (!name) {
-            showToast('Enter a preset name before saving', 'warning');
-            return;
-        }
-        const all = loadCmSavedFilters();
-        const id = `cmf_${Date.now()}`;
-        all.push({ id, name, filters: getCmFilters(), created_at: new Date().toISOString() });
-        saveCmSavedFilters(all.slice(-15));
-        if (input) {
-            input.value = '';
-        }
-        renderCmSavedFilters();
-        showToast('Filter preset saved');
-    });
-}
-
-const filterLoadButton = document.getElementById('cm-filter-load');
-if (filterLoadButton) {
-    filterLoadButton.addEventListener('click', async () => {
-        const selectedId = document.getElementById('cm-saved-filter-select')?.value || '';
-        if (!selectedId) {
-            showToast('Select a saved filter first', 'warning');
-            return;
-        }
-        await applyCmSavedFilterById(selectedId);
-    });
-}
-
-const filterDeleteButton = document.getElementById('cm-filter-delete');
-if (filterDeleteButton) {
-    filterDeleteButton.addEventListener('click', () => {
-        const selectedId = document.getElementById('cm-saved-filter-select')?.value || '';
-        if (!selectedId) {
-            showToast('Select a saved filter to delete', 'warning');
-            return;
-        }
-        const entries = loadCmSavedFilters().filter(entry => entry.id !== selectedId);
-        saveCmSavedFilters(entries);
-        renderCmSavedFilters();
-        showToast('Saved filter deleted');
     });
 }
 

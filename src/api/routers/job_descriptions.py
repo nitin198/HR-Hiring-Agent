@@ -12,6 +12,10 @@ from src.api.schemas import (
 )
 from src.database.connection import get_db
 from src.database.models import JobDescription
+from src.services.job_description_sync_service import (
+    JobDescriptionSyncService,
+    JobDescriptionSyncState,
+)
 
 router = APIRouter(prefix="/job-descriptions", tags=["Job Descriptions"])
 
@@ -68,6 +72,37 @@ async def list_job_descriptions(
         .limit(limit)
     )
     return [jd.to_dict() for jd in result.scalars().all()]
+
+
+@router.post("/sync/idsil", response_model=dict)
+async def sync_idsil_openings(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    limit: Annotated[
+        int,
+        Query(ge=1, le=500, description="Maximum records to process from API response"),
+    ] = 200,
+) -> dict:
+    """
+    Sync job descriptions from IDSIL openings API.
+    This endpoint is add-only and skips duplicates.
+    """
+    sync_service = JobDescriptionSyncService()
+    try:
+        result = await sync_service.sync_idsil_openings(
+            db=db,
+            limit=limit,
+            trigger="manual",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch IDSIL openings: {exc}") from exc
+
+    return result
+
+
+@router.get("/sync/idsil/status", response_model=dict)
+async def get_idsil_sync_status() -> dict:
+    """Get latest IDSIL sync status."""
+    return JobDescriptionSyncState.get_idsil_status()
 
 
 @router.get("/{jd_id}")

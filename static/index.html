@@ -148,7 +148,7 @@
 
         .main-container {
             padding: 2.5rem 1.5rem 3.5rem;
-            max-width: 1200px;
+            max-width: 1560px;
             margin: 0 auto;
             animation: fadeIn 0.6s ease-out;
         }
@@ -457,6 +457,26 @@
             border-radius: 12px;
             padding: 0.9rem 1rem;
             margin-bottom: 1rem;
+        }
+
+        .jd-sync-panel {
+            border: 1px solid var(--surface-300);
+            border-radius: 12px;
+            padding: 0.85rem 1rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #ecfeff, #f0fdfa);
+        }
+
+        .jd-sync-title {
+            font-weight: 700;
+            color: var(--secondary-color);
+            margin-bottom: 0.2rem;
+        }
+
+        .jd-sync-meta {
+            font-size: 0.8rem;
+            color: var(--ink-700);
+            margin-top: 0.25rem;
         }
 
         .jd-filter-bar .form-label {
@@ -830,9 +850,24 @@
             font-size: 0.9rem;
         }
 
+        .jd-search-embed {
+            width: 100%;
+            display: block;
+            min-height: 78vh;
+            height: 1200px;
+            border: 1px solid var(--surface-300);
+            border-radius: 14px;
+            background: white;
+            overflow: hidden;
+        }
+
         @media (max-width: 768px) {
             .main-container {
                 padding: 1.5rem 1rem 2.5rem;
+            }
+
+            .jd-search-embed {
+                min-height: 72vh;
             }
             
             .step-label {
@@ -926,6 +961,11 @@
             <li class="nav-item">
                 <a class="nav-link" href="#" onclick="showMainTab('candidates-management')">
                     <i class="bi bi-person-lines-fill me-1"></i>Candidates
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" onclick="showMainTab('jd-candidate-search')">
+                    <i class="bi bi-funnel me-1"></i>JD Candidate Search
                 </a>
             </li>
         </ul>
@@ -1252,11 +1292,23 @@
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="bi bi-briefcase me-2"></i>Job Descriptions Management</h5>
-                    <button class="btn btn-primary btn-sm" onclick="showCreateJdModal()">
-                        <i class="bi bi-plus me-1"></i>Create New
-                    </button>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-light btn-sm" type="button" id="jd-sync-now-btn">
+                            <i class="bi bi-arrow-repeat me-1"></i>Sync IDSIL Jobs
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="showCreateJdModal()">
+                            <i class="bi bi-plus me-1"></i>Create New
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body">
+                    <div class="jd-sync-panel">
+                        <div class="jd-sync-title">
+                            <i class="bi bi-cloud-arrow-down me-1"></i>IDSIL Job Sync
+                        </div>
+                        <div id="jd-sync-status-text" class="text-muted">Checking sync status...</div>
+                        <div id="jd-sync-meta" class="jd-sync-meta">Daily auto sync is enabled.</div>
+                    </div>
                     <div class="jd-filter-bar">
                         <div class="row g-2 align-items-end">
                             <div class="col-md-3">
@@ -1385,33 +1437,6 @@
                             </button>
                         </div>
                     </div>
-                    <div class="row compact-filter-row align-items-end cm-save-filter-row">
-                        <div class="col-auto">
-                            <label class="form-label">Saved Filters</label>
-                            <select class="form-select form-select-sm" id="cm-saved-filter-select" style="min-width: 220px;">
-                                <option value="">Select saved filter...</option>
-                            </select>
-                        </div>
-                        <div class="col-auto">
-                            <label class="form-label">Preset Name</label>
-                            <input type="text" class="form-control form-control-sm" id="cm-saved-filter-name" placeholder="e.g. Senior Python">
-                        </div>
-                        <div class="col-auto">
-                            <button class="btn btn-outline-success btn-sm" type="button" id="cm-filter-save">
-                                <i class="bi bi-bookmark-plus me-1"></i>Save
-                            </button>
-                        </div>
-                        <div class="col-auto">
-                            <button class="btn btn-outline-primary btn-sm" type="button" id="cm-filter-load">
-                                <i class="bi bi-box-arrow-in-down me-1"></i>Load
-                            </button>
-                        </div>
-                        <div class="col-auto">
-                            <button class="btn btn-outline-danger btn-sm" type="button" id="cm-filter-delete">
-                                <i class="bi bi-trash me-1"></i>Delete
-                            </button>
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -1523,6 +1548,27 @@
                         <div class="progress-bar" role="progressbar" style="width: 0%" id="cm-folder-progress-bar">0%</div>
                     </div>
                     <div class="small text-muted mt-2 d-none" id="cm-folder-progress-text">Uploading...</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="jd-candidate-search-tab" class="tab-content" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-funnel me-2"></i>JD Candidate Search
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        Search candidates by job description, grouped with ranking and fresher sections.
+                    </p>
+                    <iframe
+                        id="jd-search-iframe"
+                        class="jd-search-embed"
+                        src="/static/candidate_search.html"
+                        title="JD Candidate Search"
+                        scrolling="no"
+                        loading="lazy"
+                    ></iframe>
                 </div>
             </div>
         </div>

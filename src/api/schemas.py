@@ -26,6 +26,8 @@ class JobDescriptionResponse(BaseModel):
     required_skills: list[str]
     min_experience_years: int
     domain: str | None
+    source_system: str | None = None
+    source_key: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
 

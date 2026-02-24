@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -86,6 +86,45 @@ class Settings(BaseSettings):
     gmail_allowed_extensions_csv: str = Field(
         default=".pdf,.doc,.docx,.txt",
         description="Allowed Gmail attachment extensions (comma-separated)",
+    )
+
+    # IDSIL Careers Openings API
+    idsil_openings_api_url: str = Field(
+        default="https://webinar.idsil.com:9001/api/openings",
+        description="IDSIL careers openings API endpoint",
+    )
+    idsil_openings_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("NODE_APP_OPENINGS_API_KEY", "IDSIL_OPENINGS_API_KEY"),
+        description="API key for IDSIL openings endpoint",
+    )
+    idsil_openings_api_key_header: str = Field(
+        default="X-API-KEY",
+        description="Header name used for IDSIL openings API key",
+    )
+    idsil_openings_api_key_query_param: str | None = Field(
+        default=None,
+        description="Optional query parameter name to send IDSIL API key",
+    )
+    idsil_openings_timeout_seconds: int = Field(
+        default=20,
+        description="Timeout for IDSIL openings API calls in seconds",
+    )
+    idsil_openings_verify_ssl: bool = Field(
+        default=False,
+        description="Whether to verify SSL certificates for IDSIL openings API",
+    )
+    idsil_jd_sync_enabled: bool = Field(
+        default=True,
+        description="Enable automatic IDSIL job description sync",
+    )
+    idsil_jd_sync_interval_minutes: int = Field(
+        default=1440,
+        description="Automatic IDSIL JD sync interval in minutes",
+    )
+    idsil_jd_sync_limit: int = Field(
+        default=200,
+        description="Max IDSIL records processed per sync run",
     )
 
     @property

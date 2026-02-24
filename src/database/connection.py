@@ -48,6 +48,7 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_migrate_candidates_job_description_nullable)
         await conn.run_sync(_migrate_candidate_profiles_headline)
+        await conn.run_sync(_migrate_job_descriptions_source_metadata)
         await conn.run_sync(_ensure_candidate_job_links)
 
 
@@ -147,3 +148,15 @@ def _migrate_candidate_profiles_headline(connection) -> None:
     if "headline" in col_names:
         return
     connection.exec_driver_sql("ALTER TABLE candidate_profiles ADD COLUMN headline VARCHAR(255);")
+
+
+def _migrate_job_descriptions_source_metadata(connection) -> None:
+    if connection.dialect.name != "sqlite":
+        return
+    columns = connection.execute(text("PRAGMA table_info(job_descriptions)")).fetchall()
+    col_names = {col[1] for col in columns}
+
+    if "source_system" not in col_names:
+        connection.exec_driver_sql("ALTER TABLE job_descriptions ADD COLUMN source_system VARCHAR(50);")
+    if "source_key" not in col_names:
+        connection.exec_driver_sql("ALTER TABLE job_descriptions ADD COLUMN source_key VARCHAR(255);")

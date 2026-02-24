@@ -12,6 +12,7 @@ An autonomous AI agent that automates and improves hiring decisions using local 
 - **Hiring Recommendations**: Automated hire/reject/hold decisions with explanations
 - **Outlook Ingestion**: Fetch unread Outlook resumes and auto-classify candidates
 - **Gmail Ingestion**: Fetch unread Gmail resumes from a sender, auto-add candidates, and auto-analyze matched profiles
+- **IDSIL Openings Sync**: Pull job descriptions from IDSIL careers API with add-only dedupe sync
 
 ## Architecture
 
@@ -111,6 +112,17 @@ GMAIL_SENDER_FILTER=tanvir.k@idsil.com
 GMAIL_MAX_MESSAGES=50
 GMAIL_SYNC_INTERVAL_MINUTES=60
 GMAIL_ALLOWED_EXTENSIONS_CSV=.pdf,.doc,.docx,.txt
+
+# IDSIL Careers Openings API
+IDSIL_OPENINGS_API_URL=https://webinar.idsil.com:9001/api/openings
+IDSIL_OPENINGS_API_KEY=
+IDSIL_OPENINGS_API_KEY_HEADER=X-API-KEY
+IDSIL_OPENINGS_API_KEY_QUERY_PARAM=
+IDSIL_OPENINGS_TIMEOUT_SECONDS=20
+IDSIL_OPENINGS_VERIFY_SSL=false
+IDSIL_JD_SYNC_ENABLED=true
+IDSIL_JD_SYNC_INTERVAL_MINUTES=1440
+IDSIL_JD_SYNC_LIMIT=200
 ```
 
 ## Running
@@ -129,6 +141,8 @@ API will be available at `http://localhost:8000`
 |--------|----------|-------------|
 | POST | `/job-descriptions` | Create job description |
 | GET | `/job-descriptions` | List all job descriptions |
+| POST | `/job-descriptions/sync/idsil` | Add-only sync from IDSIL openings API (duplicates skipped) |
+| GET | `/job-descriptions/sync/idsil/status` | Get latest IDSIL sync status (manual/auto) |
 | GET | `/job-descriptions/{id}` | Get specific job description |
 | DELETE | `/job-descriptions/{id}` | Delete job description |
 
@@ -209,6 +223,16 @@ curl -X POST "http://localhost:8000/candidates/1/analyze"
 
 ```bash
 curl "http://localhost:8000/reports/hiring/1"
+```
+
+### 5. Sync Job Descriptions from IDSIL API
+
+```bash
+curl -X POST "http://localhost:8000/api/job-descriptions/sync/idsil?limit=200"
+```
+
+```bash
+curl "http://localhost:8000/api/job-descriptions/sync/idsil/status"
 ```
 
 ## Scoring System
