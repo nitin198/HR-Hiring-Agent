@@ -84,7 +84,10 @@ async def sync_idsil_openings(
 ) -> dict:
     """
     Sync job descriptions from IDSIL openings API.
-    This endpoint is add-only and skips duplicates.
+    This endpoint upserts IDSIL records:
+    - creates new openings
+    - updates existing IDSIL openings using latest normalization logic
+    - skips manual/non-IDSIL title collisions
     """
     sync_service = JobDescriptionSyncService()
     try:

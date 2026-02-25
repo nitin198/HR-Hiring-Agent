@@ -20,6 +20,10 @@ def _normalize_title_key(title: str | None) -> str:
     return " ".join((title or "").strip().lower().split())
 
 
+def _normalize_source_key(source_key: str | None) -> str:
+    return (source_key or "").strip().lower()
+
+
 class JobDescriptionSyncState:
     """In-memory sync state for status endpoint and UI."""
 
@@ -29,10 +33,13 @@ class JobDescriptionSyncState:
         "message": "Sync has not run yet.",
         "last_run_at": None,
         "created": 0,
+        "updated": 0,
+        "unchanged": 0,
         "duplicates_skipped": 0,
         "invalid_skipped": 0,
         "processed": 0,
         "total_received": 0,
+        "llm_enriched": 0,
         "trigger": None,
     }
 
@@ -72,10 +79,13 @@ class JobDescriptionSyncService:
                 "started_at": started_at,
                 "finished_at": _utc_now_iso(),
                 "created": 0,
+                "updated": 0,
+                "unchanged": 0,
                 "duplicates_skipped": 0,
                 "invalid_skipped": 0,
                 "processed": 0,
                 "total_received": 0,
+                "llm_enriched": 0,
                 "trigger": trigger,
             }
             JobDescriptionSyncState.set_idsil_status(failed)
@@ -84,20 +94,24 @@ class JobDescriptionSyncService:
         existing_rows = await db.execute(select(JobDescription))
         existing_jds = existing_rows.scalars().all()
 
-        existing_source_keys: set[str] = set()
-        existing_title_keys: set[str] = set()
+        existing_by_source_key: dict[str, JobDescription] = {}
+        existing_by_title_key: dict[str, list[JobDescription]] = {}
 
         for jd in existing_jds:
             title_key = _normalize_title_key(jd.title)
             if title_key:
-                existing_title_keys.add(title_key)
-            if jd.source_system and jd.source_key and jd.source_system.strip().lower() == self.SOURCE_SYSTEM:
-                existing_source_keys.add(jd.source_key.strip().lower())
+                existing_by_title_key.setdefault(title_key, []).append(jd)
+            source_key = _normalize_source_key(jd.source_key)
+            if source_key and jd.source_system and jd.source_system.strip().lower() == self.SOURCE_SYSTEM:
+                existing_by_source_key[source_key] = jd
 
         created = 0
+        updated = 0
+        unchanged = 0
         duplicates_skipped = 0
         invalid_skipped = 0
         processed = 0
+        llm_enriched = 0
 
         for raw in raw_openings[:limit]:
             processed += 1
@@ -111,20 +125,55 @@ class JobDescriptionSyncService:
                 continue
 
             title_key = _normalize_title_key(normalized.title)
-            source_key = (normalized.source_key or "").strip().lower()
+            source_key = _normalize_source_key(normalized.source_key)
+            existing: JobDescription | None = None
 
-            is_duplicate = False
-            if source_key and source_key in existing_source_keys:
-                is_duplicate = True
-            elif title_key in existing_title_keys:
-                is_duplicate = True
+            if source_key and source_key in existing_by_source_key:
+                existing = existing_by_source_key[source_key]
+            elif title_key:
+                title_matches = existing_by_title_key.get(title_key, [])
+                existing_idsil = next(
+                    (
+                        jd
+                        for jd in title_matches
+                        if (jd.source_system or "").strip().lower() == self.SOURCE_SYSTEM
+                    ),
+                    None,
+                )
+                if existing_idsil is not None:
+                    existing = existing_idsil
+                elif title_matches:
+                    # Preserve manual/non-IDSIL JDs with same title; don't overwrite them.
+                    duplicates_skipped += 1
+                    continue
 
-            if is_duplicate:
-                duplicates_skipped += 1
-                continue
+            before_skills = list(normalized.required_skills)
+            before_domain = normalized.domain
+            normalized = await openings_service.enrich_opening_with_llm(normalized)
+            if normalized.required_skills != before_skills or normalized.domain != before_domain:
+                llm_enriched += 1
 
-            db.add(
-                JobDescription(
+            if existing is not None:
+                changed = False
+                updates = {
+                    "title": normalized.title,
+                    "description": normalized.description,
+                    "required_skills": normalized.required_skills,
+                    "min_experience_years": normalized.min_experience_years,
+                    "domain": normalized.domain,
+                    "source_system": self.SOURCE_SYSTEM,
+                    "source_key": normalized.source_key,
+                }
+                for field, value in updates.items():
+                    if getattr(existing, field) != value:
+                        setattr(existing, field, value)
+                        changed = True
+                if changed:
+                    updated += 1
+                else:
+                    unchanged += 1
+            else:
+                created_jd = JobDescription(
                     title=normalized.title,
                     description=normalized.description,
                     required_skills=normalized.required_skills,
@@ -133,13 +182,21 @@ class JobDescriptionSyncService:
                     source_system=self.SOURCE_SYSTEM,
                     source_key=normalized.source_key,
                 )
-            )
-            created += 1
+                db.add(created_jd)
+                created += 1
 
             if title_key:
-                existing_title_keys.add(title_key)
+                if existing is not None:
+                    existing_by_title_key[title_key] = [
+                        jd for jd in existing_by_title_key.get(title_key, []) if jd.id != existing.id
+                    ] + [existing]
+                else:
+                    existing_by_title_key.setdefault(title_key, []).append(created_jd)
             if source_key:
-                existing_source_keys.add(source_key)
+                if existing is not None:
+                    existing_by_source_key[source_key] = existing
+                else:
+                    existing_by_source_key[source_key] = created_jd
 
         await db.commit()
 
@@ -151,10 +208,13 @@ class JobDescriptionSyncService:
             "started_at": started_at,
             "finished_at": _utc_now_iso(),
             "created": created,
+            "updated": updated,
+            "unchanged": unchanged,
             "duplicates_skipped": duplicates_skipped,
             "invalid_skipped": invalid_skipped,
             "processed": processed,
             "total_received": len(raw_openings),
+            "llm_enriched": llm_enriched,
             "trigger": trigger,
         }
         JobDescriptionSyncState.set_idsil_status(result)
